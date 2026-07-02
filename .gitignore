@@ -5,6 +5,9 @@
 /tmp/
 /cache/
 
+# Signing key material -- never commit private keys/passphrases.
+/keys/
+
 # Editor/OS cruft
 .DS_Store
 *.pyc
