@@ -36,7 +36,11 @@ theSchultzYocto/                  <- this repo == the "schultz" layer
 │   └── templates/schultz/        <- TEMPLATECONF bootstrap files
 ├── recipes-core/images/
 │   └── schultz-image-minimal.bb  <- our custom image recipe
-├── scripts/fetch-layers.sh       <- clones poky + meta-raspberrypi as siblings
+├── scripts/
+│   ├── fetch-layers.sh           <- clones poky + meta-raspberrypi as siblings
+│   ├── sync-to-host.sh           <- git-based sync to the build host (no scp/rsync)
+│   ├── remote-build.sh           <- runs ON the build host: bootstrap + launch build
+│   └── deploy.sh                 <- sync + remote-build in one command, from the Mac
 └── docs/
     ├── build-host-setup.md
     └── first-build.md
@@ -54,16 +58,19 @@ On the build machine, the full working layout ends up as:
 
 ## Quick start
 
-```sh
-# from this repo, on your Mac: sync it onto the build host
-rsync -av --exclude=.git ./ rpi5g16nvme:theSchultzYocto/
+From this repo, on your Mac (fully scripted, no scp/rsync -- syncs via git
+over ssh):
 
-ssh rpi5g16nvme
-cd theSchultzYocto
-./scripts/fetch-layers.sh          # clones poky + meta-raspberrypi as siblings
-cd ..
-TEMPLATECONF="$PWD/theSchultzYocto/conf/templates/schultz" source poky/oe-init-build-env build
-bitbake schultz-image-minimal
+```sh
+./scripts/deploy.sh
+```
+
+This pushes the repo to `rpi5g16nvme` via git, then bootstraps and launches
+`bitbake schultz-image-minimal` there, fully detached (survives SSH
+disconnects). Follow progress with:
+
+```sh
+ssh rpi5g16nvme 'tail -f build/schultz-build.log'
 ```
 
 Full walkthrough, including flashing the SD card, in

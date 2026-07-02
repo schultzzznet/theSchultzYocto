@@ -1,15 +1,39 @@
 # First build: zero to a booted SD card
 
+## Fast path
+
+From this repo, on your Mac:
+
+```sh
+./scripts/deploy.sh
+```
+
+This runs `sync-to-host.sh` (pushes the repo to `rpi5g16nvme` via git over
+ssh -- no scp/rsync) and then `remote-build.sh` on the host, which fetches
+poky + meta-raspberrypi if missing, bootstraps the build dir if missing,
+sanity-checks the layers, and launches `bitbake schultz-image-minimal` fully
+detached (survives SSH disconnects). Follow along with:
+
+```sh
+ssh rpi5g16nvme 'tail -f build/schultz-build.log'
+```
+
+Safe to re-run after making changes -- it just syncs and re-triggers the
+build. The rest of this doc is the manual, step-by-step version of exactly
+what those two scripts do, for troubleshooting or actually understanding
+what's happening.
+
 Assumes the build host is already set up per
 [build-host-setup.md](build-host-setup.md).
 
 ## 0. Get this repo onto the build host
 
 From this repo, on your Mac (passwordless SSH already set up as
-`rpi5g16nvme`):
+`rpi5g16nvme`). This uses git, not scp/rsync -- see
+[sync-to-host.sh](../scripts/sync-to-host.sh):
 
 ```sh
-rsync -av --exclude=.git ./ rpi5g16nvme:theSchultzYocto/
+./scripts/sync-to-host.sh
 ssh rpi5g16nvme
 cd theSchultzYocto
 ```
@@ -94,6 +118,11 @@ entire small Linux distribution from source. Expect it to take a while,
 especially on a memory-constrained host (see
 [build-host-setup.md](build-host-setup.md)). Subsequent builds reuse
 `sstate-cache` and are much faster.
+
+Running this directly like that ties it to your SSH session. `remote-build.sh`
+runs the equivalent build wrapped in `setsid nohup ... & disown`, logged to
+`build/schultz-build.log`, so it survives disconnects -- worth doing manually
+the same way if you're not using the script.
 
 ## 5. Flash the SD card
 
