@@ -8,6 +8,10 @@
 # Signing key material -- never commit private keys/passphrases.
 /keys/
 
+# PlatformIO build artifacts + real WiFi credentials
+tools/esp32-serial-bridge/.pio/
+tools/esp32-serial-bridge/include/secrets.h
+
 # Editor/OS cruft
 .DS_Store
 *.pyc
