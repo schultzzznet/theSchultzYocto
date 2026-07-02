@@ -1,0 +1,11 @@
+# Yocto/BitBake build outputs -- huge, host-specific, never commit.
+/build/
+/downloads/
+/sstate-cache/
+/tmp/
+/cache/
+
+# Editor/OS cruft
+.DS_Store
+*.pyc
+__pycache__/
