@@ -250,3 +250,53 @@ ecosystem-specific Package URLs) are worth turning on if/when the image
 grows beyond C/C++ components — they make the SBOM's package identities
 match up more precisely with what Dependency-Track/OWASP matches against.
 
+## Signing and OTA updates — what's real here vs. what's still a project
+
+This is the one area where it's worth being explicit about the line between
+"scaffolded and build-verified" and "a genuine remaining project," because
+some of it fundamentally can't be verified without physical hardware access.
+
+**Actually working, verified on rpi5g16nvme:**
+
+- `scripts/generate-signing-keys.sh` generates two independent things: a GPG
+  key (`schultz-dev`) for package feed signing, and a self-signed x509
+  dev cert/key pair for RAUC bundle signing. Both confirmed to actually run
+  successfully (`gpg`/`openssl` are on the build host, keys land in
+  `../keys/`, gitignored, script is idempotent).
+- Package feed signing (`INHERIT += "sign_package_feed"` +
+  `PACKAGE_FEED_GPG_NAME`) is real, standard OE-Core functionality — it
+  signs the IPK repository index, not individual `.ipk` files (that's an
+  IPK format limitation, not a shortcut we took; RPM has real per-package
+  signing instead, via a separate `sign_rpm`/`sequoia` class). Templated,
+  commented out, in `local.conf.sample`.
+- `recipes-core/images/schultz-bundle.bb` is a real RAUC bundle recipe using
+  the documented `inherit bundle` pattern with confirmed variable names
+  (`RAUC_BUNDLE_FORMAT`, `RAUC_BUNDLE_SLOTS`, `RAUC_SLOT_rootfs`,
+  `RAUC_KEY_FILE`, `RAUC_CERT_FILE`).
+
+**Deliberately not implemented — a real project, not a config tweak:**
+
+- RAUC's actual value (atomic, rollback-safe updates) needs A/B rootfs
+  partitions and a bootloader (U-Boot) that tracks which slot to boot —
+  Raspberry Pi's native firmware boot process doesn't have that state
+  machine built in. This is a genuine architecture change (new `.wks`
+  partition layout, U-Boot bring-up on `raspberrypi3-64`, a
+  `rauc-conf.bbappend` with a real `system.conf`), not something to
+  configure your way into.
+- `scripts/fetch-rauc-layers.sh` (opt-in, not run yet) points at
+  [meta-rauc](https://github.com/rauc/meta-rauc) and
+  [meta-rauc-community](https://github.com/rauc/meta-rauc-community)'s
+  `meta-rauc-raspberrypi` reference layer — a real, community-maintained
+  example of exactly this integration, worth adapting from rather than
+  reinventing.
+- Note on branch naming: meta-rauc uses `gh_<release>` (e.g.
+  `gh_scarthgap`), not plain `<release>` like poky/meta-raspberrypi —
+  confirmed by checking the repo directly, another instance of "verify,
+  don't assume, even for release branch names."
+- The honest reason this stopped here: whether U-Boot actually boots,
+  whether slot-switching actually works, whether a bad update actually
+  rolls back — none of that is checkable by inspecting build logs. It
+  needs a screen or serial cable on the actual Pi. That's a "you, with the
+  hardware in hand" step, not something to fake confidence about.
+
+
