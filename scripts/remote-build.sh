@@ -17,11 +17,16 @@ if [ ! -d poky ] || [ ! -d meta-raspberrypi ]; then
   "$REPO_DIR/scripts/fetch-layers.sh"
 fi
 
+# oe-init-build-env isn't written to be `set -u`-safe (references variables
+# like BBSERVER that it expects may be unset), so relax strict mode just for
+# sourcing it.
+set +u
 if [ ! -f build/conf/local.conf ]; then
   TEMPLATECONF="$REPO_DIR/conf/templates/schultz" source poky/oe-init-build-env build
 else
   source poky/oe-init-build-env build
 fi
+set -u
 
 bitbake-layers show-layers
 
