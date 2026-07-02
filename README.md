@@ -19,10 +19,13 @@ recipes, image customization, `local.conf`/`bblayers.conf`, and `devtool`.
 ## Build host
 
 BitBake requires a native Linux host — it will **not** run on macOS. This
-project builds on a dedicated Linux machine (not this workspace's Mac), fully
-aware that's going to be slow on older/modest hardware. See
-[docs/build-host-setup.md](docs/build-host-setup.md) before you start,
-especially if your build box has 8GB RAM or less.
+project builds on **rpi5g16nvme** (Raspberry Pi 5, 16GB RAM, NVMe storage,
+Ubuntu 24.04.4 LTS), reachable passwordlessly via `ssh rpi5g16nvme`. Being
+aarch64 doesn't speed up cross-compilation itself (BitBake cross-compiles
+regardless of host arch), but it does let some rootfs postinstall steps run
+natively instead of under QEMU emulation, and the NVMe + 16GB RAM are real
+wins. An old 8GB Intel MacBook Pro (`mbpi5g8no1`/`mbpi5g8no2`) is documented
+as a fallback in [docs/build-host-setup.md](docs/build-host-setup.md).
 
 ## Repo layout
 
@@ -52,6 +55,11 @@ On the build machine, the full working layout ends up as:
 ## Quick start
 
 ```sh
+# from this repo, on your Mac: sync it onto the build host
+rsync -av --exclude=.git ./ rpi5g16nvme:theSchultzYocto/
+
+ssh rpi5g16nvme
+cd theSchultzYocto
 ./scripts/fetch-layers.sh          # clones poky + meta-raspberrypi as siblings
 cd ..
 TEMPLATECONF="$PWD/theSchultzYocto/conf/templates/schultz" source poky/oe-init-build-env build

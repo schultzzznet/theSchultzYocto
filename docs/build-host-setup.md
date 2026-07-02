@@ -1,8 +1,23 @@
 # Build host setup
 
-BitBake needs a real Linux system — no macOS, no native Windows. These notes
-are for the dedicated Linux box doing the actual build (an old i5/8GB
-MacBook Pro, in this project's case).
+BitBake needs a real Linux system — no macOS, no native Windows.
+
+## Primary build host: rpi5g16nvme
+
+Verified 2026-07-02 over SSH (`ssh rpi5g16nvme`, passwordless/key-based):
+
+| | |
+|---|---|
+| OS | Ubuntu 24.04.4 LTS — officially supported by Yocto |
+| CPU | 4 cores (Raspberry Pi 5, Cortex-A76, aarch64) |
+| RAM | 16GB total, ~13GB free at idle |
+| Disk | NVMe, 458GB total, 397GB free |
+| Idle temp | ~47°C (worth keeping an eye on under sustained build load) |
+
+This clears every requirement below comfortably — no swap/parallelism tuning
+needed. The sections further down (disk space, RAM) are kept as a documented
+fallback for the alternative build host: an old 8GB Intel MacBook Pro
+(`mbpi5g8no1` / `mbpi5g8no2`).
 
 ## Supported distros
 
@@ -51,21 +66,23 @@ in Poky, or the
 
 ## Disk space
 
-Official guidance is blunt: **140GB free** minimum for a typical build (that
-figure is calibrated for a fuller image like `core-image-sato` on
+Not a concern on rpi5g16nvme (397GB free). For reference / the MacBook Pro
+fallback: official guidance is blunt — **140GB free** minimum for a typical
+build (that figure is calibrated for a fuller image like `core-image-sato` on
 `qemux86-64`). Our target (`schultz-image-minimal`, cross-compiled for arm)
 is much lighter, but downloads + sstate-cache + tmp/work still add up fast.
 Budget 80-100GB+ if you can, more if you'll iterate a lot or keep several
 build trees around.
 
-## RAM — the part that matters for an 8GB machine
+## RAM — only relevant on the 8GB MacBook Pro fallback
 
-Current official guidance says **32GB RAM** as a baseline. That's real, but
-it's calibrated for building heavier images. A minimal headless arm image is
-lighter, but 8GB is still genuinely tight for a modern Yocto build — some
-native/toolchain components are memory-hungry to compile regardless of the
-target. Expect it to be slow, and take these precautions so a heavy compile
-phase doesn't get OOM-killed:
+Not relevant on rpi5g16nvme's 16GB (currently ~13GB free at idle). Current
+official guidance says **32GB RAM** as a baseline, calibrated for building
+heavier images. A minimal headless arm image is lighter, but 8GB (the
+MacBook Pro fallback) is still genuinely tight for a modern Yocto build —
+some native/toolchain components are memory-hungry to compile regardless of
+the target. If you end up on that fallback, expect it to be slow, and take
+these precautions so a heavy compile phase doesn't get OOM-killed:
 
 1. **Add generous swap** (16GB+) as a safety net, not a performance feature:
 

@@ -3,6 +3,19 @@
 Assumes the build host is already set up per
 [build-host-setup.md](build-host-setup.md).
 
+## 0. Get this repo onto the build host
+
+From this repo, on your Mac (passwordless SSH already set up as
+`rpi5g16nvme`):
+
+```sh
+rsync -av --exclude=.git ./ rpi5g16nvme:theSchultzYocto/
+ssh rpi5g16nvme
+cd theSchultzYocto
+```
+
+Everything from here on runs on `rpi5g16nvme`, not on the Mac.
+
 ## 1. Fetch the layers
 
 ```sh
