@@ -161,3 +161,80 @@ For patching *within* a release rather than jumping releases:
   names for later): secure boot / verified boot chains, `meta-secure-core`,
   dm-verity/IMA integrity measurement, signed package feeds. All real,
   all more involved than this learning project needs yet.
+
+## Fitting into a real toolchain: git, Artifactory, Dependency-Track
+
+### Git — it's already doing more than you think
+
+Beyond hosting our layer, git is also the fetch mechanism for a big chunk of
+*upstream* source: most recipes use `SRC_URI = "git://...;branch=..."` with a
+pinned `SRCREV`, so a huge amount of what BitBake fetches is a git operation
+under the hood, version-pinned per recipe.
+
+Managing many layers (each its own git repo, each needing a matching release
+branch) gets painful with raw submodules. The community answer is
+**[kas](https://kas.readthedocs.io/)** — a YAML manifest that declares your
+layers, branches, and patches, and sets up the whole build environment in one
+command. `meta-raspberrypi` ships its own `kas-poky-rpi.yml` for exactly this
+reason. Google's `repo` tool (Android-style multi-repo manifests) is the
+other common option. Worth adopting once you're juggling more than 2-3
+layers — not needed yet here.
+
+What deliberately stays *out* of git either way: `build/`, `downloads/`,
+`sstate-cache/`, `tmp/` — huge, host-specific, and fully reproducible from
+recipes + config. Already in [.gitignore](../.gitignore).
+
+### Artifactory — shared caches and artifact storage
+
+Two BitBake variables turn Artifactory (or Nexus, or any generic HTTP repo)
+into shared build infrastructure instead of a place to dump files:
+
+- **`SSTATE_MIRRORS`** — point it at a generic Artifactory repo and every
+  build host/CI runner can fetch pre-built task outputs (compiled
+  `gcc-cross`, `glibc`, etc.) instead of rebuilding them. This is the same
+  idea as Yocto's own public sstate mirror
+  (the `core/yocto/sstate-mirror-cdn` fragment in the new `bitbake-setup`
+  tool enables exactly this, pointed at `sstate.yoctoproject.org`) — you'd
+  just point at your own Artifactory instance instead.
+- **`SOURCE_MIRROR_URL` / `PREMIRRORS`** — mirror upstream source tarballs.
+  Protects you when an upstream project deletes a tag or goes offline
+  mid-project (it happens), and is faster than re-fetching from the public
+  internet every time.
+
+Beyond mirrors, Artifactory's format-aware repo types (Debian, RPM) can host
+an actual package feed if you ever want field updates via `opkg`/`apt`
+instead of full image re-flashes — and its generic repos are a normal place
+to publish the final `.wic.bz2` images as versioned release artifacts, same
+as any other build output.
+
+### Dependency-Track — this one's basically already happening
+
+Good news: recent Yocto releases generate a full **SPDX SBOM by default**,
+no configuration needed (the `create-spdx` class is in `INHERIT_DISTRO` out
+of the box). Once `schultz-image-minimal` finishes building, there will be an
+SBOM sitting at:
+
+```
+tmp/deploy/images/raspberrypi3-64/schultz-image-minimal-raspberrypi3-64.spdx.json
+```
+
+listing every recipe that went into the image, its version, license, and
+source. Dependency-Track's `/api/v1/bom` endpoint accepts SPDX directly (not
+just CycloneDX), so the pipeline is exactly the one you already run for
+other projects: build → grab that `.spdx.json` → POST it to your
+Dependency-Track instance (mind the trailing-newline-in-API-key gotcha —
+same class of bug either way).
+
+This complements `cve-check` rather than duplicating it: `cve-check` is a
+one-shot, build-time check against NVD at the moment you build.
+Dependency-Track is continuous monitoring of a *living* SBOM — it catches
+CVEs disclosed against a package version *after* you already shipped it,
+months later, without needing to rebuild anything. Feeding both from the
+same build gives you shift-left detection *and* ongoing coverage.
+
+The `SPDX_INCLUDE_*`/PURL-enrichment options mentioned in the SBOM docs
+(`cargo_common`, `go-mod`, `pypi`, `npm`, `cpan*` classes populate
+ecosystem-specific Package URLs) are worth turning on if/when the image
+grows beyond C/C++ components — they make the SBOM's package identities
+match up more precisely with what Dependency-Track/OWASP matches against.
+
