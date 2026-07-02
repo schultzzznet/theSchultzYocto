@@ -297,6 +297,8 @@ some of it fundamentally can't be verified without physical hardware access.
   whether slot-switching actually works, whether a bad update actually
   rolls back — none of that is checkable by inspecting build logs. It
   needs a screen or serial cable on the actual Pi. That's a "you, with the
-  hardware in hand" step, not something to fake confidence about.
+  hardware in hand" step, not something to fake confidence about. See
+  [docs/serial-console.md](serial-console.md) for the actual hardware/wiring
+  needed to get that access.
 
 

@@ -13,6 +13,12 @@ actually is, how a distro comes together, why this approach is worth the
 setup cost, and how updates/security work — grounded in this repo's own
 recipes and the mistakes we hit building it.
 
+Need to debug a boot that never gets far enough for SSH?
+[docs/serial-console.md](docs/serial-console.md) covers getting a serial
+console on the Pi (dedicated USB-TTL adapter or a repurposed spare
+ESP32/ESP8266), the GPIO pinout, and wiring for both a direct-wired setup
+and the WiFi-based [tools/esp32-serial-bridge/](tools/esp32-serial-bridge/).
+
 ## Why this exists
 
 Short version: yes, RPi3 + Yocto is a genuinely good way to actually learn
