@@ -13,6 +13,8 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(dirname "$REPO_DIR")"
 cd "$WORK_DIR"
 
+"$REPO_DIR/scripts/remote-prereqs.sh"
+
 if [ ! -d poky ] || [ ! -d meta-raspberrypi ]; then
   "$REPO_DIR/scripts/fetch-layers.sh"
 fi
