@@ -20,4 +20,15 @@ if ! locale --all-locales | grep -q en_US.utf8; then
   sudo locale-gen
 fi
 
+# Ubuntu 24.04 restricts unprivileged user namespaces by default (AppArmor
+# hardening) -- BitBake's pseudo/fakeroot mechanism needs them, and fails
+# with "User namespaces are not usable by BitBake, possibly due to
+# AppArmor." Relaxing this only makes sense on a dedicated, non-shared build
+# box (which this is) -- see
+# https://discourse.ubuntu.com/t/ubuntu-24-04-lts-noble-numbat-release-notes/39890#unprivileged-user-namespace-restrictions
+if [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" = "1" ]; then
+  echo "kernel.apparmor_restrict_unprivileged_userns=0" | sudo tee /etc/sysctl.d/60-apparmor-namespace.conf > /dev/null
+  sudo sysctl --system > /dev/null
+fi
+
 echo "Build host packages OK"

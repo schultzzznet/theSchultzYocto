@@ -19,6 +19,19 @@ needed. The sections further down (disk space, RAM) are kept as a documented
 fallback for the alternative build host: an old 8GB Intel MacBook Pro
 (`mbpi5g8no1` / `mbpi5g8no2`).
 
+### Ubuntu 24.04-specific: unprivileged user namespaces
+
+Ubuntu 24.04 restricts unprivileged user namespaces by default (AppArmor
+hardening, new in 24.04). BitBake's pseudo/fakeroot mechanism needs them and
+fails with `User namespaces are not usable by BitBake, possibly due to
+AppArmor.` `scripts/remote-prereqs.sh` relaxes this via
+`/etc/sysctl.d/60-apparmor-namespace.conf`
+(`kernel.apparmor_restrict_unprivileged_userns=0`) — a real, documented
+security trade-off, only reasonable because this is a dedicated, non-shared
+build box. See [Ubuntu's release notes](https://discourse.ubuntu.com/t/ubuntu-24-04-lts-noble-numbat-release-notes/39890#unprivileged-user-namespace-restrictions)
+for the details and other mitigation options (e.g. a scoped AppArmor profile
+instead of a blanket system-wide disable).
+
 ## Supported distros
 
 Officially tested (per the [Yocto Reference Manual](https://docs.yoctoproject.org/ref-manual/system-requirements.html#supported-linux-distributions)
