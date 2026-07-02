@@ -8,6 +8,11 @@ This repo *is* a Yocto layer (collection name `schultz`) — it doesn't contain
 Poky or the Raspberry Pi BSP layer itself; those get cloned alongside it on
 the Linux build machine (see [docs/first-build.md](docs/first-build.md)).
 
+New to Yocto? [docs/yocto-concepts.md](docs/yocto-concepts.md) covers what it
+actually is, how a distro comes together, why this approach is worth the
+setup cost, and how updates/security work — grounded in this repo's own
+recipes and the mistakes we hit building it.
+
 ## Why this exists
 
 Short version: yes, RPi3 + Yocto is a genuinely good way to actually learn
