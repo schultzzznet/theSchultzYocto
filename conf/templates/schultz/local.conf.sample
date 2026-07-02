@@ -43,3 +43,14 @@ CONF_VERSION = "2"
 # the exact flag name(s) to add here if/when it complains. See
 # docs/first-build.md.
 #LICENSE_FLAGS_ACCEPTED = ""
+
+# --- Optional: Artifactory as a shared sstate/source mirror ---
+# Fill in your real Artifactory host + generic repo names and uncomment.
+# SSTATE_MIRRORS lets other build hosts/CI runners fetch pre-built task
+# output instead of recompiling gcc-cross/glibc/etc from scratch.
+# SOURCE_MIRROR_URL/PREMIRRORS protects against upstream sources
+# disappearing and speeds up fetches. See docs/yocto-concepts.md.
+#SSTATE_MIRRORS ?= "file://.* https://artifactory.example.com/artifactory/yocto-sstate/PATH;downloadfilename=PATH"
+#SOURCE_MIRROR_URL ?= "https://artifactory.example.com/artifactory/yocto-sources/"
+#INHERIT += "own-mirrors"
+

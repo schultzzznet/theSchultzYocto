@@ -201,6 +201,10 @@ into shared build infrastructure instead of a place to dump files:
   mid-project (it happens), and is faster than re-fetching from the public
   internet every time.
 
+Both are templated (commented out) in
+[local.conf.sample](../conf/templates/schultz/local.conf.sample) — fill in
+a real Artifactory host + repo names and uncomment.
+
 Beyond mirrors, Artifactory's format-aware repo types (Debian, RPM) can host
 an actual package feed if you ever want field updates via `opkg`/`apt`
 instead of full image re-flashes — and its generic repos are a normal place
@@ -224,6 +228,14 @@ just CycloneDX), so the pipeline is exactly the one you already run for
 other projects: build → grab that `.spdx.json` → POST it to your
 Dependency-Track instance (mind the trailing-newline-in-API-key gotcha —
 same class of bug either way).
+
+This is now wired up, not just described: `scripts/upload-sbom.sh` does the
+upload (reads `DTRACK_URL`/`DTRACK_API_KEY` from the environment, strips
+whitespace from the key first). `remote-build.sh` auto-runs it after a
+successful build via `scripts/run-build-and-report.sh`, but only if
+`DTRACK_URL` is set — export it (and `DTRACK_API_KEY`) on the build host
+before running `deploy.sh`/`remote-build.sh` to opt in; leave it unset and
+nothing changes.
 
 This complements `cve-check` rather than duplicating it: `cve-check` is a
 one-shot, build-time check against NVD at the moment you build.

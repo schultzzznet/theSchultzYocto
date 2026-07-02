@@ -34,6 +34,9 @@ bitbake-layers show-layers
 
 LOG="$WORK_DIR/build/schultz-build.log"
 echo "Launching bitbake schultz-image-minimal in the background -- log: $LOG"
-setsid nohup bitbake schultz-image-minimal > "$LOG" 2>&1 < /dev/null &
+if [ -n "${DTRACK_URL:-}" ]; then
+  echo "DTRACK_URL is set -- will auto-upload the SBOM on a successful build."
+fi
+setsid nohup "$REPO_DIR/scripts/run-build-and-report.sh" > "$LOG" 2>&1 < /dev/null &
 disown
 echo "Build PID: $!  (tail -f $LOG to follow)"
