@@ -128,6 +128,10 @@ runs the equivalent build wrapped in `setsid nohup ... & disown`, logged to
 `build/schultz-build.log`, so it survives disconnects -- worth doing manually
 the same way if you're not using the script.
 
+For checking on a build that's already running in the background, and what
+to do if the build host reboots or otherwise dies mid-build, see
+[build-operations.md](build-operations.md).
+
 ## 5. Flash the SD card
 
 ```sh

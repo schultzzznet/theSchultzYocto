@@ -19,6 +19,11 @@ console on the Pi (dedicated USB-TTL adapter or a repurposed spare
 ESP32/ESP8266), the GPIO pinout, and wiring for both a direct-wired setup
 and the WiFi-based [tools/esp32-serial-bridge/](tools/esp32-serial-bridge/).
 
+Build already running and you want to check on it (or it just died)?
+[docs/build-operations.md](docs/build-operations.md) covers checking status
+on a detached build, what does/doesn't survive a build-host reboot, and
+recovering from a corrupted `tmp/`/`sstate-cache` after an unclean shutdown.
+
 ## Why this exists
 
 Short version: yes, RPi3 + Yocto is a genuinely good way to actually learn

@@ -38,6 +38,41 @@ nc pi-serial-bridge.local 8880
 ```
 
 (Plain `nc`/`telnet` — mDNS means you don't need to hunt for the DHCP IP.)
+Verified working end-to-end 2026-07-02: resolved to a real LAN IP, and
+`nc -w 5 pi-serial-bridge.local 8880` showed live kernel console output and
+a login prompt from the Pi. Raw `nc` doesn't render ANSI color/escape
+codes that colored boot output uses — they show up as garbled bytes. Use a
+real terminal (`screen pi-serial-bridge.local 8880` won't work over a plain
+TCP port the way it does over a device file; pipe through `nc` into
+something that understands escapes, or just tolerate the noise) if that
+matters to you.
+
+## Troubleshooting
+
+**`ping`/`nc` can't resolve `pi-serial-bridge.local` ("Unknown host"):**
+- Is `secrets.h` actually filled in with your real SSID/password, not still
+  the placeholder from `secrets.h.example`? (`cat include/secrets.h`)
+- Is the board actually powered and flashed (`pio run -t upload` succeeded)?
+- Same WiFi network/VLAN as whatever you're connecting from — mDNS doesn't
+  cross subnets or AP client-isolation.
+- One-time sanity check: `pio device monitor` right after a power-on/reset —
+  the firmware prints the IP it got over serial, so you can confirm it
+  joined WiFi at all even before mDNS enters the picture.
+
+**Flashing (`pio run -t upload`) fails / port busy:**
+- Something else may still have the port open (e.g. a direct-passthrough
+  monitoring session using the same physical USB-serial adapter). Check
+  before flashing: `lsof /dev/cu.usbserial-XXXX` — if a PID shows up, stop
+  that process/terminal first.
+
+**Don't use this for flashing a whole SD card image:**
+- UART2 here runs at 115200 baud (~11 KB/s). A Yocto image is easily
+  100+ MB. That's hours over a raw byte-forwarding link with no error
+  correction — this bridge is for watching console/boot output and driving
+  U-Boot, not bulk data transfer. See
+  [docs/serial-console.md](../../docs/serial-console.md) and
+  [docs/first-build.md](../../docs/first-build.md) for the real SD card
+  flashing flow (`bmaptool`, physical card swap).
 
 ## Note
 

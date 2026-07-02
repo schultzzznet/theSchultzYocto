@@ -112,3 +112,14 @@ WiFi bridge instead of a physical cable (after flashing
 ```sh
 nc pi-serial-bridge.local 8880
 ```
+
+## Not a flashing mechanism
+
+It's tempting to wonder whether this same WiFi bridge could be used to
+*install* a new SD card image, instead of just watching console output.
+Practically, no: UART2 runs at 115200 baud (~11 KB/s), and a Yocto image is
+easily 100+ MB — pushing that over a raw byte-forwarding link with no error
+correction would take hours and be fragile. Use it for what it's good at
+(boot logs, U-Boot, login prompts) and see
+[docs/first-build.md](first-build.md) for actually flashing a card
+(`bmaptool` + a physical card swap).
