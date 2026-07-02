@@ -4,12 +4,16 @@
 # this won't do anything useful on macOS.
 #
 # Usage: ./scripts/fetch-layers.sh [branch]
-#   branch defaults to "wrynose" (Yocto 6.0 LTS). If meta-raspberrypi has no
-#   branch for it yet, try "scarthgap" (Yocto 5.0 LTS) instead.
+#   branch defaults to "scarthgap" (Yocto 5.0 LTS). Verified via
+#   `git ls-remote --heads` that neither poky nor meta-raspberrypi have a
+#   "wrynose" branch yet (2026-07-02), despite the official Yocto Quick
+#   Build doc showing a wrynose clone example for meta-raspberrypi -- docs
+#   were apparently ahead of the actual repo state. Re-check with
+#   `git ls-remote --heads <repo-url>` before switching to wrynose.
 
 set -euo pipefail
 
-BRANCH="${1:-wrynose}"
+BRANCH="${1:-scarthgap}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 cd "$ROOT_DIR"

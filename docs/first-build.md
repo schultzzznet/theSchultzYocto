@@ -46,8 +46,10 @@ Everything from here on runs on `rpi5g16nvme`, not on the Mac.
 ./scripts/fetch-layers.sh
 ```
 
-This clones `poky` and `meta-raspberrypi` (both on the `wrynose` branch —
-Yocto 6.0 LTS) as siblings of this repo. Resulting layout:
+This clones `poky` and `meta-raspberrypi` (both on the `scarthgap` branch —
+Yocto 5.0 LTS; verified 2026-07-02 that neither repo has a `wrynose` branch
+yet, despite the official docs' example using one) as siblings of this repo.
+Resulting layout:
 
 ```
 <workdir>/
@@ -56,13 +58,15 @@ Yocto 6.0 LTS) as siblings of this repo. Resulting layout:
 └── theSchultzYocto/   <- this repo
 ```
 
-If you'd rather do it by hand (or `wrynose` isn't available for some reason —
-try `scarthgap`, the previous LTS, as a fallback):
+If you'd rather do it by hand:
 
 ```sh
-git clone -b wrynose https://git.yoctoproject.org/poky
-git clone -b wrynose https://git.yoctoproject.org/meta-raspberrypi
+git clone -b scarthgap https://git.yoctoproject.org/poky
+git clone -b scarthgap https://git.yoctoproject.org/meta-raspberrypi
 ```
+
+(Check `git ls-remote --heads <repo-url>` if you want to try `wrynose` later —
+it may get its own branch once Yocto 6.0 is a bit more settled.)
 
 ## 2. Bootstrap the build directory
 

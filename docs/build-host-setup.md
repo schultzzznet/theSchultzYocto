@@ -27,6 +27,11 @@ for the current 6.0 "Wrynose" release): Ubuntu 22.04/24.04/25.x, Debian
 Linux 8/9. Other distros generally work but aren't validated — if your
 distro's Git/tar/Python/make/gcc are too old, see the buildtools note below.
 
+(Note: we actually build against the `scarthgap` branch of poky/meta-raspberrypi,
+not `wrynose` — confirmed via `git ls-remote --heads` that neither repo has cut
+a wrynose branch yet, even though it's the current named release. See
+[first-build.md](first-build.md).)
+
 ## Packages (Ubuntu / Debian)
 
 ```sh
