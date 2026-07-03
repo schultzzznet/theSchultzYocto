@@ -44,19 +44,20 @@ CONF_VERSION = "2"
 # docs/first-build.md.
 #LICENSE_FLAGS_ACCEPTED = ""
 
-# --- Optional: Nexus Repository CE as a shared sstate/source mirror ---
-# Corrected 2026-07-03: this used to say "Artifactory" -- checked the actual
-# home-lab infra (the-docker-swarm-ai project) and there is no Artifactory
-# instance. It was deliberately evaluated and rejected there (free tier is
-# Java-only, no npm; download infra points at the dead Bintray) in favor of
-# Nexus Repository CE, which IS actually running (MacStudioM2Max12:8081).
-# NOT wired up yet: Nexus only has maven-public/npm-proxy/docker-proxy repos
-# configured there so far, no generic "raw" repo (what Yocto's mirrors need,
-# via plain HTTP GET/PUT) -- that's a real prerequisite step, not just
-# uncommenting these two lines. See infra/dev-server/README.md in that repo.
-#SSTATE_MIRRORS ?= "file://.* http://MacStudioM2Max12.local:8081/repository/yocto-sstate-raw/PATH;downloadfilename=PATH"
-#SOURCE_MIRROR_URL ?= "http://MacStudioM2Max12.local:8081/repository/yocto-sources-raw/"
-#INHERIT += "own-mirrors"
+# --- Activated 2026-07-03: Nexus Repository CE as a shared sstate/source mirror ---
+# Corrected from an earlier "Artifactory" version of this comment -- checked
+# the actual home-lab infra (the-docker-swarm-ai project) and there is no
+# Artifactory instance. It was deliberately evaluated and rejected there
+# (free tier is Java-only, no npm; download infra points at the dead
+# Bintray) in favor of Nexus Repository CE, which IS actually running
+# (MacStudioM2Max12:8081, this same Mac). Nexus didn't have a generic "raw"
+# repo before this (only maven-public/npm-proxy/docker-proxy) -- created
+# yocto-sources-raw + yocto-sstate-raw via scripts/setup-nexus-mirror.sh,
+# and verified an actual PUT-from-Mac / GET-from-build-host round trip works
+# (anonymous read, same posture as the other Nexus repos on this instance).
+SSTATE_MIRRORS ?= "file://.* http://MacStudioM2Max12.local:8081/repository/yocto-sstate-raw/PATH;downloadfilename=PATH"
+SOURCE_MIRROR_URL ?= "http://MacStudioM2Max12.local:8081/repository/yocto-sources-raw/"
+INHERIT += "own-mirrors"
 
 # --- Optional: sign the IPK package feed ---
 # Run scripts/generate-signing-keys.sh first (creates the "schultz-dev" GPG
