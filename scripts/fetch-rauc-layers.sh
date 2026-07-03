@@ -6,13 +6,15 @@
 # A/B setup by itself.
 #
 # Usage: ./scripts/fetch-rauc-layers.sh [branch]
-#   branch defaults to "gh_scarthgap" -- meta-rauc's branch naming for the
-#   Yocto 5.0 LTS series is "gh_<release>", NOT plain "<release>" like
-#   poky/meta-raspberrypi. Verify with `git ls-remote --heads` if in doubt.
+#   branch defaults to "scarthgap" -- matches poky/meta-raspberrypi. Verified
+#   2026-07-03 via `git ls-remote --heads`. (Earlier in this project's life
+#   meta-rauc used a "gh_<release>" naming scheme instead -- that's gone now.
+#   Branch naming on upstream repos can change over time; re-verify with
+#   `git ls-remote --heads <repo-url>` rather than trusting old notes.)
 
 set -euo pipefail
 
-BRANCH="${1:-gh_scarthgap}"
+BRANCH="${1:-scarthgap}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 cd "$ROOT_DIR"

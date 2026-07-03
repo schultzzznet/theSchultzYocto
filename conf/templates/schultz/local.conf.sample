@@ -59,14 +59,14 @@ CONF_VERSION = "2"
 # key). This signs the feed/repository index, not individual .ipk files --
 # that's the mechanism IPK actually has (RPM has real per-package signing
 # instead, via a different class -- see docs/yocto-concepts.md).
-#INHERIT += "sign_package_feed"
-#PACKAGE_FEED_GPG_NAME = "schultz-dev"
-#PACKAGE_FEED_GPG_PASSPHRASE_FILE = "${TOPDIR}/../../keys/gpg-passphrase.txt"
+INHERIT += "sign_package_feed"
+PACKAGE_FEED_GPG_NAME = "schultz-dev"
+PACKAGE_FEED_GPG_PASSPHRASE_FILE = "${TOPDIR}/../keys/gpg-passphrase.txt"
 
 # --- Optional: RAUC (signed, A/B-capable OTA updates) ---
 # Real scope note: this enables RAUC and lets you build a signed bundle, but
 # safe A/B rollback also needs a bootloader (U-Boot) + partition layout
 # change that isn't wired up here yet -- see docs/yocto-concepts.md for
 # exactly what's scaffolded vs. what still needs physical hardware bring-up.
-#DISTRO_FEATURES:append = " rauc"
-#IMAGE_INSTALL:append = " rauc"
+DISTRO_FEATURES:append = " rauc"
+IMAGE_INSTALL:append = " rauc rauc-conf"
