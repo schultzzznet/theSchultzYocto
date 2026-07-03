@@ -136,7 +136,7 @@ to do if the build host reboots or otherwise dies mid-build, see
 
 ```sh
 cd tmp/deploy/images/raspberrypi3-64/
-bmaptool copy schultz-image-minimal-raspberrypi3-64.wic.bz2 /dev/sdX
+bmaptool copy schultz-image-minimal-raspberrypi3-64.rootfs.wic.bz2 /dev/sdX
 ```
 
 Replace `/dev/sdX` with your SD card's actual device (double, triple check
