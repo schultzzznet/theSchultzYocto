@@ -19,6 +19,17 @@ if [ ! -d poky ] || [ ! -d meta-raspberrypi ]; then
   "$REPO_DIR/scripts/fetch-layers.sh"
 fi
 
+# Pick up DTRACK_URL/DTRACK_API_KEY automatically if present, without ever
+# committing them -- same gitignored-sibling convention as keys/development-1.*
+# (see scripts/generate-signing-keys.sh). Doesn't override already-exported
+# values, so `DTRACK_URL=... ./remote-build.sh` still works for one-offs.
+if [ -f "$WORK_DIR/keys/dtrack.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$WORK_DIR/keys/dtrack.env"
+  set +a
+fi
+
 # oe-init-build-env isn't written to be `set -u`-safe (references variables
 # like BBSERVER that it expects may be unset), so relax strict mode just for
 # sourcing it.

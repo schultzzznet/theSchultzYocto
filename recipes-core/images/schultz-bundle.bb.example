@@ -1,0 +1,33 @@
+# DISABLED BY DEFAULT -- kept as `.bb.example`, not `.bb`, on purpose.
+#
+# `inherit bundle` below requires classes/bundle.bbclass from the meta-rauc
+# layer, which this repo does NOT fetch or add to bblayers.conf by default
+# (see scripts/fetch-rauc-layers.sh -- opt-in, not run as part of a normal
+# build). BitBake parses every *.bb file matched by BBFILES up front,
+# regardless of build target, so leaving this as a real .bb file with no
+# meta-rauc in bblayers.conf hard-fails ANY bitbake invocation, not just a
+# build of this recipe. Learned that the hard way: it silently broke a
+# from-reboot rebuild of the unrelated schultz-image-minimal target.
+#
+# To actually use this recipe:
+#   1. ./scripts/fetch-rauc-layers.sh          (clones meta-rauc + meta-rauc-community)
+#   2. add meta-rauc to build/conf/bblayers.conf
+#   3. mv recipes-core/images/schultz-bundle.bb.example recipes-core/images/schultz-bundle.bb
+#   4. still need a real rauc-conf (system.conf/keyring) -- see docs/yocto-concepts.md
+#      for what's scaffolded vs. what's still needed.
+SUMMARY = "RAUC update bundle for schultz-image-minimal (raspberrypi3-64)"
+DESCRIPTION = "Builds a signed RAUC bundle wrapping schultz-image-minimal. \
+Requires RAUC_KEY_FILE/RAUC_CERT_FILE (see scripts/generate-signing-keys.sh) \
+and a matching rauc-conf (system.conf/keyring) providing the platform's \
+'compatible' string -- neither of those exist yet in this repo. See \
+docs/yocto-concepts.md for exactly what's scaffolded vs. what's still \
+needed (adapted from meta-rauc-community's meta-rauc-raspberrypi layer)."
+
+inherit bundle
+
+RAUC_BUNDLE_FORMAT = "verity"
+RAUC_BUNDLE_SLOTS = "rootfs"
+RAUC_SLOT_rootfs = "schultz-image-minimal"
+
+RAUC_KEY_FILE ?= "${TOPDIR}/../keys/development-1.key.pem"
+RAUC_CERT_FILE ?= "${TOPDIR}/../keys/development-1.cert.pem"

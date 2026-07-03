@@ -44,14 +44,18 @@ CONF_VERSION = "2"
 # docs/first-build.md.
 #LICENSE_FLAGS_ACCEPTED = ""
 
-# --- Optional: Artifactory as a shared sstate/source mirror ---
-# Fill in your real Artifactory host + generic repo names and uncomment.
-# SSTATE_MIRRORS lets other build hosts/CI runners fetch pre-built task
-# output instead of recompiling gcc-cross/glibc/etc from scratch.
-# SOURCE_MIRROR_URL/PREMIRRORS protects against upstream sources
-# disappearing and speeds up fetches. See docs/yocto-concepts.md.
-#SSTATE_MIRRORS ?= "file://.* https://artifactory.example.com/artifactory/yocto-sstate/PATH;downloadfilename=PATH"
-#SOURCE_MIRROR_URL ?= "https://artifactory.example.com/artifactory/yocto-sources/"
+# --- Optional: Nexus Repository CE as a shared sstate/source mirror ---
+# Corrected 2026-07-03: this used to say "Artifactory" -- checked the actual
+# home-lab infra (the-docker-swarm-ai project) and there is no Artifactory
+# instance. It was deliberately evaluated and rejected there (free tier is
+# Java-only, no npm; download infra points at the dead Bintray) in favor of
+# Nexus Repository CE, which IS actually running (MacStudioM2Max12:8081).
+# NOT wired up yet: Nexus only has maven-public/npm-proxy/docker-proxy repos
+# configured there so far, no generic "raw" repo (what Yocto's mirrors need,
+# via plain HTTP GET/PUT) -- that's a real prerequisite step, not just
+# uncommenting these two lines. See infra/dev-server/README.md in that repo.
+#SSTATE_MIRRORS ?= "file://.* http://MacStudioM2Max12.local:8081/repository/yocto-sstate-raw/PATH;downloadfilename=PATH"
+#SOURCE_MIRROR_URL ?= "http://MacStudioM2Max12.local:8081/repository/yocto-sources-raw/"
 #INHERIT += "own-mirrors"
 
 # --- Optional: sign the IPK package feed ---
@@ -70,3 +74,10 @@ PACKAGE_FEED_GPG_PASSPHRASE_FILE = "${TOPDIR}/../keys/gpg-passphrase.txt"
 # exactly what's scaffolded vs. what still needs physical hardware bring-up.
 DISTRO_FEATURES:append = " rauc"
 IMAGE_INSTALL:append = " rauc rauc-conf"
+
+# --- Activated 2026-07-03: cve-check ---
+# Scans package versions against a local NVD feed mirror at build time (in
+# addition to, not instead of, Dependency-Track's continuous post-build
+# re-analysis -- see docs/yocto-concepts.md). Report per image:
+# tmp/deploy/images/<machine>/<image>.rootfs.cve
+INHERIT += "cve-check"
