@@ -17,11 +17,12 @@
 #      for what's scaffolded vs. what's still needed.
 SUMMARY = "RAUC update bundle for schultz-image-minimal (raspberrypi3-64)"
 DESCRIPTION = "Builds a signed RAUC bundle wrapping schultz-image-minimal. \
-Requires RAUC_KEY_FILE/RAUC_CERT_FILE (see scripts/generate-signing-keys.sh) \
-and a matching rauc-conf (system.conf/keyring) providing the platform's \
-'compatible' string -- neither of those exist yet in this repo. See \
-docs/yocto-concepts.md for exactly what's scaffolded vs. what's still \
-needed (adapted from meta-rauc-community's meta-rauc-raspberrypi layer)."
+Real as of 2026-07-03: meta-rauc is in bblayers.conf, RAUC_KEY_FILE/ \
+RAUC_CERT_FILE point at real dev key material (scripts/generate-signing-keys.sh), \
+and recipes-core/rauc/ provides a real system.conf + keyring (rauc-conf.bbappend). \
+Still NOT real: on-target A/B installs. system.conf has no [slot.*] section --\
+that needs an actual A/B partition layout and U-Boot integration, which needs \
+physical hardware bring-up to verify. See docs/yocto-concepts.md."
 
 inherit bundle
 
