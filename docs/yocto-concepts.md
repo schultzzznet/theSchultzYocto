@@ -162,7 +162,7 @@ For patching *within* a release rather than jumping releases:
   dm-verity/IMA integrity measurement, signed package feeds. All real,
   all more involved than this learning project needs yet.
 
-## Fitting into a real toolchain: git, Artifactory, Dependency-Track
+## Fitting into a real toolchain: git, Nexus, Dependency-Track
 
 ### Git — it's already doing more than you think
 
@@ -184,58 +184,86 @@ What deliberately stays *out* of git either way: `build/`, `downloads/`,
 `sstate-cache/`, `tmp/` — huge, host-specific, and fully reproducible from
 recipes + config. Already in [.gitignore](../.gitignore).
 
-### Artifactory — shared caches and artifact storage
+### Nexus — shared caches and artifact storage
 
-Two BitBake variables turn Artifactory (or Nexus, or any generic HTTP repo)
+(Artifactory was evaluated first and rejected — Java-only on the free tier,
+and its Bintray-based install docs point at long-dead infrastructure. Nexus
+Repository CE turned out to be the practical choice for a home-lab; if you
+already run Artifactory elsewhere, the same two BitBake variables apply.)
+
+Two BitBake variables turn Nexus (or Artifactory, or any generic HTTP repo)
 into shared build infrastructure instead of a place to dump files:
 
-- **`SSTATE_MIRRORS`** — point it at a generic Artifactory repo and every
-  build host/CI runner can fetch pre-built task outputs (compiled
+- **`SSTATE_MIRRORS`** — point it at a generic Nexus raw-hosted repo and
+  every build host/CI runner can fetch pre-built task outputs (compiled
   `gcc-cross`, `glibc`, etc.) instead of rebuilding them. This is the same
   idea as Yocto's own public sstate mirror
   (the `core/yocto/sstate-mirror-cdn` fragment in the new `bitbake-setup`
   tool enables exactly this, pointed at `sstate.yoctoproject.org`) — you'd
-  just point at your own Artifactory instance instead.
+  just point at your own Nexus instance instead.
 - **`SOURCE_MIRROR_URL` / `PREMIRRORS`** — mirror upstream source tarballs.
   Protects you when an upstream project deletes a tag or goes offline
   mid-project (it happens), and is faster than re-fetching from the public
   internet every time.
 
-Both are templated (commented out) in
-[local.conf.sample](../conf/templates/schultz/local.conf.sample) — fill in
-a real Artifactory host + repo names and uncomment.
+This is now real, not just templated: [scripts/setup-nexus-mirror.sh](../scripts/setup-nexus-mirror.sh)
+creates the two raw-hosted repos (`yocto-sources-raw`, `yocto-sstate-raw`)
+via Nexus's REST API, and both variables are active (uncommented) in
+[local.conf.sample](../conf/templates/schultz/local.conf.sample), pointed at
+a Nexus instance on the local network. One known rough edge: BitBake's
+`BB_HASHSERVE` (on by default) isn't fully compatible with `SSTATE_MIRRORS`
+— logs a warning, doesn't block builds, low priority to fix while the
+mirror is still lightly populated.
 
-Beyond mirrors, Artifactory's format-aware repo types (Debian, RPM) can host
+Beyond mirrors, Nexus's format-aware repo types (Debian, RPM, apt) can host
 an actual package feed if you ever want field updates via `opkg`/`apt`
-instead of full image re-flashes — and its generic repos are a normal place
-to publish the final `.wic.bz2` images as versioned release artifacts, same
-as any other build output.
+instead of full image re-flashes — and its raw/generic repos are a normal
+place to publish the final `.wic.bz2` images as versioned release
+artifacts, same as any other build output.
 
-### Dependency-Track — this one's basically already happening
+### Dependency-Track — this one's real now, not just described
 
-Good news: recent Yocto releases generate a full **SPDX SBOM by default**,
-no configuration needed (the `create-spdx` class is in `INHERIT_DISTRO` out
-of the box). Once `schultz-image-minimal` finishes building, there will be an
-SBOM sitting at:
+Recent Yocto releases generate a full **SPDX SBOM by default**, no
+configuration needed (the `create-spdx` class is in `INHERIT_DISTRO` out of
+the box). Once `schultz-image-minimal` finishes building, there's an SPDX
+document sitting at
+`tmp/deploy/images/raspberrypi3-64/schultz-image-minimal-raspberrypi3-64.spdx.json`
+— but it turns out that file is a red herring for feeding Dependency-Track:
 
-```
-tmp/deploy/images/raspberrypi3-64/schultz-image-minimal-raspberrypi3-64.spdx.json
-```
+- **Dependency-Track's `/api/v1/bom` endpoint is CycloneDX-only.** Verified
+  against the source (`CycloneDxValidator.java`) and empirically (raw SPDX
+  gets a bare `HTTP 400 Unable to determine schema version from JSON`) — it
+  never even attempts SPDX parsing, on v4.13 *or* the current v5.0.2.
+- Yocto's own SPDX output is also not one flat document — it's a graph of
+  166+ linked files (one per recipe, joined by `externalDocumentRefs`).
+  Converting just the top-level document (e.g. via `cyclonedx-cli convert
+  --input-format spdxjson`) only captures the image itself as a single
+  fake "component", none of the real packages.
 
-listing every recipe that went into the image, its version, license, and
-source. Dependency-Track's `/api/v1/bom` endpoint accepts SPDX directly (not
-just CycloneDX), so the pipeline is exactly the one you already run for
-other projects: build → grab that `.spdx.json` → POST it to your
-Dependency-Track instance (mind the trailing-newline-in-API-key gotcha —
-same class of bug either way).
+So the real pipeline **doesn't** touch the `.spdx.json` at all. Instead,
+[scripts/manifest-to-cyclonedx.py](../scripts/manifest-to-cyclonedx.py)
+generates a minimal, valid CycloneDX **1.6** JSON document directly from
+Yocto's plain-text `.manifest` file (`<name> <arch> <version>` per line,
+emitted by every image build regardless of SPDX settings), using generic
+`pkg:generic/<name>@<version>` PURLs — a real, stated limitation, since
+there's no ecosystem-specific PURL type for Yocto/OE packages, so
+Dependency-Track's ecosystem-aware version matching (Alpine/Debian/Go/
+Maven/NPM/PyPI/RPM) won't kick in; it falls back to plain name+version
+matching, still enough for basic CVE tracking.
 
-This is now wired up, not just described: `scripts/upload-sbom.sh` does the
-upload (reads `DTRACK_URL`/`DTRACK_API_KEY` from the environment, strips
-whitespace from the key first). `remote-build.sh` auto-runs it after a
+[scripts/upload-sbom.sh](../scripts/upload-sbom.sh) does the upload (reads
+`DTRACK_URL`/`DTRACK_API_KEY` from the environment, strips whitespace from
+the key first — mind the trailing-newline-in-API-key gotcha, it produces a
+bare 400 with no body, easy to mistake for an auth failure). It also checks
+the actual HTTP status before declaring success — `curl` doesn't fail on
+4xx/5xx without `-f`, so a naive script can print "Uploaded successfully"
+on a real rejection. `remote-build.sh` auto-runs the upload after a
 successful build via `scripts/run-build-and-report.sh`, but only if
-`DTRACK_URL` is set — export it (and `DTRACK_API_KEY`) on the build host
-before running `deploy.sh`/`remote-build.sh` to opt in; leave it unset and
-nothing changes.
+`DTRACK_URL` is set (sourced from a gitignored `keys/dtrack.env` sibling
+directory, same convention as the RAUC signing keys) — leave it unset and
+nothing changes. Verified end-to-end against both Dependency-Track v4.13.0
+and v5.0.2: 83/83 real packages land as components, fully processed through
+internal vulnerability analysis.
 
 This complements `cve-check` rather than duplicating it: `cve-check` is a
 one-shot, build-time check against NVD at the moment you build.
@@ -243,12 +271,6 @@ Dependency-Track is continuous monitoring of a *living* SBOM — it catches
 CVEs disclosed against a package version *after* you already shipped it,
 months later, without needing to rebuild anything. Feeding both from the
 same build gives you shift-left detection *and* ongoing coverage.
-
-The `SPDX_INCLUDE_*`/PURL-enrichment options mentioned in the SBOM docs
-(`cargo_common`, `go-mod`, `pypi`, `npm`, `cpan*` classes populate
-ecosystem-specific Package URLs) are worth turning on if/when the image
-grows beyond C/C++ components — they make the SBOM's package identities
-match up more precisely with what Dependency-Track/OWASP matches against.
 
 ## Signing and OTA updates — what's real here vs. what's still a project
 
