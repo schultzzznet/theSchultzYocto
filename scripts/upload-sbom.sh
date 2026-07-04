@@ -41,9 +41,25 @@ fi
 RESOLVED_BASENAME="$(basename "$(readlink -f "$SBOM_TARBALL")")"
 MEMBER="${RESOLVED_BASENAME%.tar.zst}.json"
 
-SBOM="$(mktemp /tmp/schultz-sbom-XXXXXX.spdx.json)"
-trap 'rm -f "$SBOM"' EXIT
-tar --zstd -xO -f "$SBOM_TARBALL" "$MEMBER" > "$SBOM"
+SBOM_SPDX="$(mktemp /tmp/schultz-sbom-XXXXXX.spdx.json)"
+SBOM_CDX="$(mktemp /tmp/schultz-sbom-XXXXXX.cdx.json)"
+trap 'rm -f "$SBOM_SPDX" "$SBOM_CDX"' EXIT
+tar --zstd -xO -f "$SBOM_TARBALL" "$MEMBER" > "$SBOM_SPDX"
+
+# Dependency-Track's /api/v1/bom endpoint validates uploads as CycloneDX --
+# it does NOT accept SPDX (confirmed 2026-07-04 via DependencyTrack's own
+# CycloneDxValidator.java source: it throws "Unable to determine schema
+# version from JSON" because it's looking for CycloneDX's specVersion
+# field, not SPDX's spdxVersion). Yocto's create-spdx has no CycloneDX
+# equivalent (checked oe-core/meta-openembedded -- no such class exists),
+# so convert with cyclonedx-cli (github.com/CycloneDX/cyclonedx-cli,
+# installed at /usr/local/bin/cyclonedx-cli).
+if ! command -v cyclonedx-cli > /dev/null 2>&1; then
+  echo "cyclonedx-cli not found -- install it first (see docs/build-operations.md)" >&2
+  exit 1
+fi
+cyclonedx-cli convert --input-file "$SBOM_SPDX" --input-format spdxjson \
+  --output-file "$SBOM_CDX" --output-format json
 
 # Strip whitespace/newlines from the key -- a trailing \n in an API key
 # header causes a bare HTTP 400 with no response body, easy to mistake for
@@ -55,7 +71,7 @@ curl -sS -X POST "${DTRACK_URL%/}/api/v1/bom" \
   -F "autoCreate=true" \
   -F "projectName=${PROJECT_NAME}" \
   -F "projectVersion=${PROJECT_VERSION}" \
-  -F "bom=@${SBOM}"
+  -F "bom=@${SBOM_CDX}"
 
 echo
-echo "Uploaded $SBOM to ${DTRACK_URL} as ${PROJECT_NAME}:${PROJECT_VERSION}"
+echo "Uploaded $SBOM_CDX (converted from $SBOM_SPDX) to ${DTRACK_URL} as ${PROJECT_NAME}:${PROJECT_VERSION}"

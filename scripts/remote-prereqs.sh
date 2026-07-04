@@ -31,4 +31,35 @@ if [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)"
   sudo sysctl --system > /dev/null
 fi
 
+# cyclonedx-cli: converts Yocto's SPDX SBOM to CycloneDX before uploading to
+# Dependency-Track (whose /api/v1/bom endpoint only accepts CycloneDX -- see
+# scripts/upload-sbom.sh). Not packaged for apt; a single static binary from
+# GitHub releases, checksum-verified. Arch-aware since docs/build-host-setup.md
+# documents x86_64 fallback hosts (mbpi5g8no1/no2) alongside this aarch64 one.
+if ! command -v cyclonedx-cli > /dev/null 2>&1; then
+  CDXCLI_VERSION="0.32.0"
+  case "$(uname -m)" in
+    aarch64|arm64)
+      CDXCLI_ASSET="cyclonedx-linux-arm64"
+      CDXCLI_SHA256="abf0b7c5648a5b127791d691cad41f004aceea27c75bb42c9572fdc9694770cf"
+      ;;
+    x86_64|amd64)
+      CDXCLI_ASSET="cyclonedx-linux-x64"
+      CDXCLI_SHA256="454879e6a4a405c8a13bff49b8982adcb0596f3019b26b0811c66e4d7f0783e1"
+      ;;
+    *)
+      echo "No known cyclonedx-cli build for $(uname -m) -- skipping, SBOM upload will fail" >&2
+      CDXCLI_ASSET=""
+      ;;
+  esac
+  if [ -n "${CDXCLI_ASSET:-}" ]; then
+    CDXCLI_TMP="$(mktemp)"
+    curl -sSL -o "$CDXCLI_TMP" \
+      "https://github.com/CycloneDX/cyclonedx-cli/releases/download/v${CDXCLI_VERSION}/${CDXCLI_ASSET}"
+    echo "${CDXCLI_SHA256}  ${CDXCLI_TMP}" | sha256sum -c -
+    chmod +x "$CDXCLI_TMP"
+    sudo mv "$CDXCLI_TMP" /usr/local/bin/cyclonedx-cli
+  fi
+fi
+
 echo "Build host packages OK"
