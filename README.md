@@ -92,6 +92,44 @@ ssh rpi5g16nvme 'tail -f build/schultz-build.log'
 Full walkthrough, including flashing the SD card, in
 [docs/first-build.md](docs/first-build.md).
 
+## Yocto release: why `scarthgap`, and when to move
+
+This project pins **`scarthgap` (Yocto 5.0 LTS)** across poky, `meta-raspberrypi`,
+and `meta-rauc` — see [scripts/fetch-layers.sh](scripts/fetch-layers.sh) and
+[scripts/fetch-rauc-layers.sh](scripts/fetch-rauc-layers.sh). It's deliberately
+*not* the newest Yocto (**`wrynose` / 6.0 LTS** shipped April 2026); it's the
+newest release the **Raspberry Pi BSP actually supports**, which is what decides
+it here:
+
+- `meta-raspberrypi`'s branches currently stop at `whinlatter` (5.3) — there is
+  **no `wrynose` branch yet**, so 6.0 simply isn't an option for this board.
+- Every `meta-raspberrypi` branch *newer* than scarthgap (`styhead` 5.1,
+  `walnascar` 5.2, `whinlatter` 5.3) is a **non-LTS that is already EOL**.
+- So scarthgap is the newest **LTS with a Pi BSP branch** — still actively
+  maintained (5.0.18, June 2026) and supported until **April 2028**.
+
+**The move to make later:** once `agherzan/meta-raspberrypi` publishes a
+`wrynose` branch, bump the fetch scripts from `scarthgap` to `wrynose` to land
+on the 6.0 LTS (supported until 2030). `meta-rauc` is already ahead — it *has* a
+`wrynose` branch — so only the Pi BSP gates the jump.
+
+**How you'll know it's time — Renovate won't tell you.** The catch isn't that
+the releases lack numbers — they have them (scarthgap = 5.0, wrynose = 6.0, and
+6.0 > 5.0 is trivially orderable). It's that the layers are tracked by git
+*branch name* (`scarthgap`), and the number↔codename mapping lives on the Yocto
+wiki, **not in the git refs Renovate reads**: `meta-raspberrypi`'s branches are
+bare codenames (`scarthgap`, `styhead`, `walnascar`, `whinlatter`), none
+containing a "5.0"/"6.0" for a version-sorter to compare — and no off-the-shelf
+Renovate/Dependabot manager knows the codename→number table. (The move is also
+gated on the `wrynose` branch *existing at all*, which is an existence check,
+not a version comparison.) So the trigger stays a one-liner — run it now and
+then, or drop it in a scheduled CI job:
+
+```sh
+git ls-remote --heads https://github.com/agherzan/meta-raspberrypi \
+  | grep -q wrynose && echo "meta-raspberrypi has wrynose -- time to bump scarthgap -> wrynose."
+```
+
 ## A note on `bitbake-setup`
 
 Yocto 6.0 ("Wrynose") introduced a new guided `bitbake-setup` /
