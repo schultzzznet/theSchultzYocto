@@ -58,8 +58,13 @@ if ! command -v cyclonedx-cli > /dev/null 2>&1; then
   echo "cyclonedx-cli not found -- install it first (see docs/build-operations.md)" >&2
   exit 1
 fi
+# --output-version pinned: cyclonedx-cli 0.32.0 defaults to CycloneDX 1.7,
+# which this Dependency-Track instance (v4.13.0) rejects with "Unrecognized
+# specVersion 1.7" (confirmed 2026-07-04). The other 4 projects already in
+# this DT instance were all uploaded as CycloneDX 1.6 -- matching that known-
+# good version rather than trusting the tool's newest-spec default.
 cyclonedx-cli convert --input-file "$SBOM_SPDX" --input-format spdxjson \
-  --output-file "$SBOM_CDX" --output-format json
+  --output-file "$SBOM_CDX" --output-format json --output-version v1_6
 
 # Strip whitespace/newlines from the key -- a trailing \n in an API key
 # header causes a bare HTTP 400 with no response body, easy to mistake for
