@@ -130,6 +130,43 @@ git ls-remote --heads https://github.com/agherzan/meta-raspberrypi \
   | grep -q wrynose && echo "meta-raspberrypi has wrynose -- time to bump scarthgap -> wrynose."
 ```
 
+## A note on caching (the Nexus mirror) — isn't rebuilding from source the point?
+
+Caching build output isn't against Yocto's grain; it *is* Yocto's grain.
+BitBake is a hash-based build system: every task's inputs (recipe, config,
+dependencies, toolchain) are hashed into a signature, and the **shared state
+(sstate)** cache stores each task's *output* keyed by that signature. If the
+inputs haven't changed the signature matches, and the cached output is provably
+byte-identical to what a rebuild would produce — so re-running the task is pure
+waste. Restoring it isn't "trusting a stale binary", it's "this exact input
+already produced this exact output". Without sstate, changing one line in one
+recipe would rebuild `gcc-cross`, `glibc`, and the whole world every time; the
+cache is what makes iterative Yocto usable at all. The Yocto project itself runs
+a public sstate mirror (`sstate.yoctoproject.org`) for precisely this reason.
+
+Two things get mirrored here — both activated in
+[local.conf.sample](conf/templates/schultz/local.conf.sample), pointed at a
+**Nexus** raw repo on the LAN (created by
+[scripts/setup-nexus-mirror.sh](scripts/setup-nexus-mirror.sh)):
+
+- **`SOURCE_MIRROR_URL`** — the pinned upstream source tarballs (`DL_DIR`).
+  Pure resilience: upstream tags vanish and projects go offline mid-project.
+  Every fetch is checksum-verified against the recipe's `SRC_URI[sha256sum]`,
+  so a mirror can't smuggle anything in — it either matches the pin or the
+  build fails.
+- **`SSTATE_MIRRORS`** — the compiled task outputs described above.
+
+The "from source, pinned, reproducible" guarantee is untouched: `downloads/`
+still holds checksum-verified upstream sources, and you can always delete
+sstate and rebuild to an identical result — the cache is an optimization, never
+the source of truth. The one thing that genuinely needs care is that task
+**signatures be complete** (an output must not depend on anything not captured
+in its hash, e.g. a host path or timestamp); that's where sstate correctness
+actually lives, not in the idea of caching itself. (Related known gap here:
+BitBake's `BB_HASHSERVE` hash-equivalence isn't fully reconciled with
+`SSTATE_MIRRORS` yet — logged, low priority while the mirror is lightly
+populated.) Deeper dive in [docs/yocto-concepts.md](docs/yocto-concepts.md).
+
 ## A note on `bitbake-setup`
 
 Yocto 6.0 ("Wrynose") introduced a new guided `bitbake-setup` /
