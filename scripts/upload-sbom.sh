@@ -66,12 +66,25 @@ cyclonedx-cli convert --input-file "$SBOM_SPDX" --input-format spdxjson \
 # an auth failure (see /memories/dtrack-api-key-newline.md).
 API_KEY="$(printf '%s' "$DTRACK_API_KEY" | tr -d '\r\n ')"
 
-curl -sS -X POST "${DTRACK_URL%/}/api/v1/bom" \
+# -w + explicit status check: curl exits 0 for HTTP error responses too
+# (401/403/etc) unless -f/--fail is passed, and -f swallows the response
+# body that would actually explain the failure. Capture status separately
+# instead so a rejected upload is loud, not silently reported as success
+# (learned the hard way 2026-07-04 -- this used to always print "Uploaded"
+# regardless of whether the request actually succeeded).
+HTTP_STATUS="$(curl -sS -o /tmp/dtrack-upload-response.$$ -w '%{http_code}' -X POST "${DTRACK_URL%/}/api/v1/bom" \
   -H "X-Api-Key: ${API_KEY}" \
   -F "autoCreate=true" \
   -F "projectName=${PROJECT_NAME}" \
   -F "projectVersion=${PROJECT_VERSION}" \
-  -F "bom=@${SBOM_CDX}"
+  -F "bom=@${SBOM_CDX}")"
+RESPONSE_BODY="$(cat /tmp/dtrack-upload-response.$$)"
+rm -f "/tmp/dtrack-upload-response.$$"
 
-echo
-echo "Uploaded $SBOM_CDX (converted from $SBOM_SPDX) to ${DTRACK_URL} as ${PROJECT_NAME}:${PROJECT_VERSION}"
+if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+  echo "SBOM upload FAILED: HTTP $HTTP_STATUS" >&2
+  echo "$RESPONSE_BODY" >&2
+  exit 1
+fi
+
+echo "Uploaded $SBOM_CDX (converted from $SBOM_SPDX) to ${DTRACK_URL} as ${PROJECT_NAME}:${PROJECT_VERSION} (HTTP $HTTP_STATUS)"
