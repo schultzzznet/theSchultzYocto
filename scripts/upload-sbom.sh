@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Uploads the built image's SPDX SBOM (generated automatically by Yocto's
-# create-spdx class) to a Dependency-Track instance. Run on the build host,
-# after a successful build of schultz-image-minimal.
+# Uploads a CycloneDX SBOM (built from the image's .manifest file -- see
+# scripts/manifest-to-cyclonedx.py for why not Yocto's own SPDX output) to a
+# Dependency-Track instance. Run on the build host, after a successful build
+# of schultz-image-minimal.
 #
 # Required environment variables:
 #   DTRACK_URL       e.g. https://dtrack.example.com
@@ -22,49 +23,27 @@ PROJECT_VERSION="${DTRACK_PROJECT_VERSION:-raspberrypi3-64-$(date +%Y%m%d)}"
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(dirname "$REPO_DIR")"
-SBOM_TARBALL="$WORK_DIR/build/tmp/deploy/images/raspberrypi3-64/schultz-image-minimal-raspberrypi3-64.rootfs.spdx.tar.zst"
+MANIFEST="$WORK_DIR/build/tmp/deploy/images/raspberrypi3-64/schultz-image-minimal-raspberrypi3-64.rootfs.manifest"
 
-if [ ! -f "$SBOM_TARBALL" ]; then
-  echo "No SBOM at $SBOM_TARBALL -- build schultz-image-minimal first (create-spdx" >&2
-  echo "runs automatically as part of the image build, no extra step needed)." >&2
+if [ ! -f "$MANIFEST" ]; then
+  echo "No manifest at $MANIFEST -- build schultz-image-minimal first." >&2
   exit 1
 fi
 
-# create-spdx-2.2 produces a tarball of many linked SPDX documents (one per
-# recipe/package), not a single flat .spdx.json. The top-level image
-# document -- the one to actually hand to Dependency-Track -- is the entry
-# with the same base name as the tarball itself, just without .tar.zst.
-# (Confirmed by inspecting a real tarball 2026-07-03: first entry listed is
-# exactly this, e.g. tarball
-# "...rootfs-20260703080504.spdx.tar.zst" contains member
-# "...rootfs-20260703080504.spdx.json".)
-RESOLVED_BASENAME="$(basename "$(readlink -f "$SBOM_TARBALL")")"
-MEMBER="${RESOLVED_BASENAME%.tar.zst}.json"
-
-SBOM_SPDX="$(mktemp /tmp/schultz-sbom-XXXXXX.spdx.json)"
+# Historical note: originally extracted+converted Yocto's own SPDX output
+# (create-spdx-2.2) via cyclonedx-cli. Abandoned 2026-07-04 -- that SPDX
+# output is a graph of 166+ linked documents (one per recipe/package via
+# externalDocumentRefs), and converting just the top-level document only
+# captures the image itself as a single "package", none of its actual
+# constituent packages. Generating directly from the plain-text .manifest
+# file (name/arch/version per line, exactly what's needed) is simpler and
+# actually gets the full package list into Dependency-Track. See
+# scripts/manifest-to-cyclonedx.py for the real, stated limitation (generic
+# PURLs, not ecosystem-specific -- less precise vuln matching than a real
+# distro's packages would get, but a genuine per-package list nonetheless).
 SBOM_CDX="$(mktemp /tmp/schultz-sbom-XXXXXX.cdx.json)"
-trap 'rm -f "$SBOM_SPDX" "$SBOM_CDX"' EXIT
-tar --zstd -xO -f "$SBOM_TARBALL" "$MEMBER" > "$SBOM_SPDX"
-
-# Dependency-Track's /api/v1/bom endpoint validates uploads as CycloneDX --
-# it does NOT accept SPDX (confirmed 2026-07-04 via DependencyTrack's own
-# CycloneDxValidator.java source: it throws "Unable to determine schema
-# version from JSON" because it's looking for CycloneDX's specVersion
-# field, not SPDX's spdxVersion). Yocto's create-spdx has no CycloneDX
-# equivalent (checked oe-core/meta-openembedded -- no such class exists),
-# so convert with cyclonedx-cli (github.com/CycloneDX/cyclonedx-cli,
-# installed at /usr/local/bin/cyclonedx-cli).
-if ! command -v cyclonedx-cli > /dev/null 2>&1; then
-  echo "cyclonedx-cli not found -- install it first (see docs/build-operations.md)" >&2
-  exit 1
-fi
-# --output-version pinned: cyclonedx-cli 0.32.0 defaults to CycloneDX 1.7,
-# which this Dependency-Track instance (v4.13.0) rejects with "Unrecognized
-# specVersion 1.7" (confirmed 2026-07-04). The other 4 projects already in
-# this DT instance were all uploaded as CycloneDX 1.6 -- matching that known-
-# good version rather than trusting the tool's newest-spec default.
-cyclonedx-cli convert --input-file "$SBOM_SPDX" --input-format spdxjson \
-  --output-file "$SBOM_CDX" --output-format json --output-version v1_6
+trap 'rm -f "$SBOM_CDX"' EXIT
+python3 "$REPO_DIR/scripts/manifest-to-cyclonedx.py" "$MANIFEST" "$PROJECT_NAME" "$PROJECT_VERSION" > "$SBOM_CDX"
 
 # Strip whitespace/newlines from the key -- a trailing \n in an API key
 # header causes a bare HTTP 400 with no response body, easy to mistake for
@@ -92,4 +71,4 @@ if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
   exit 1
 fi
 
-echo "Uploaded $SBOM_CDX (converted from $SBOM_SPDX) to ${DTRACK_URL} as ${PROJECT_NAME}:${PROJECT_VERSION} (HTTP $HTTP_STATUS)"
+echo "Uploaded $SBOM_CDX to ${DTRACK_URL} as ${PROJECT_NAME}:${PROJECT_VERSION} (HTTP $HTTP_STATUS)"
