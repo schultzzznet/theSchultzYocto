@@ -38,12 +38,25 @@ fi
 # constituent packages. Generating directly from the plain-text .manifest
 # file (name/arch/version per line, exactly what's needed) is simpler and
 # actually gets the full package list into Dependency-Track. See
-# scripts/manifest-to-cyclonedx.py for the real, stated limitation (generic
-# PURLs, not ecosystem-specific -- less precise vuln matching than a real
-# distro's packages would get, but a genuine per-package list nonetheless).
+# scripts/manifest-to-cyclonedx.py for details. Components carry generic
+# `pkg:generic/...` PURLs (no ecosystem-specific PURL type exists for OE
+# packages), so on their own DT can't match CVEs -- but we also feed in
+# cve-check's per-recipe CPE product table below so each component gets a real
+# CPE and DT's NVD matching actually works.
+CVE_SUMMARY="$WORK_DIR/build/tmp/log/cve/cve-summary.json"
+PKGDATA_DIR="$WORK_DIR/build/tmp/pkgdata/raspberrypi3-64/runtime-reverse"
+
 SBOM_CDX="$(mktemp /tmp/schultz-sbom-XXXXXX.cdx.json)"
 trap 'rm -f "$SBOM_CDX"' EXIT
-python3 "$REPO_DIR/scripts/manifest-to-cyclonedx.py" "$MANIFEST" "$PROJECT_NAME" "$PROJECT_VERSION" > "$SBOM_CDX"
+if [ -f "$CVE_SUMMARY" ]; then
+  # pkgdata is the authoritative pkg->recipe map: it lets lib* package names
+  # (libssl3 -> openssl, libc6 -> glibc) get CPEs too. Passing a missing dir is
+  # harmless -- the generator just falls back to name/prefix matching.
+  python3 "$REPO_DIR/scripts/manifest-to-cyclonedx.py" "$MANIFEST" "$PROJECT_NAME" "$PROJECT_VERSION" "$CVE_SUMMARY" "$PKGDATA_DIR" > "$SBOM_CDX"
+else
+  echo "No cve-summary.json at $CVE_SUMMARY -- uploading with generic PURLs only (no CPEs; enable cve-check for real DT matching)." >&2
+  python3 "$REPO_DIR/scripts/manifest-to-cyclonedx.py" "$MANIFEST" "$PROJECT_NAME" "$PROJECT_VERSION" > "$SBOM_CDX"
+fi
 
 # Strip whitespace/newlines from the key -- a trailing \n in an API key
 # header causes a bare HTTP 400 with no response body, easy to mistake for
