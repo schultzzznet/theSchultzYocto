@@ -32,6 +32,12 @@ together in Dependency-Track (tracked as a project named after this repo,
 threat models (with their honest limits), and how to trace any single "this CVE
 is fine" decision all the way back to evidence.
 
+Ready to put it on real hardware with rollback-safe OTA?
+[docs/rauc-ab-updates.md](docs/rauc-ab-updates.md) walks through building an A/B
+RAUC image (U-Boot + dual rootfs slots), flashing it, and doing a live update
+and rollback on the Pi over a serial console — the real payoff of rolling your
+own distro.
+
 ## Why this exists
 
 Short version: yes, RPi3 + Yocto is a genuinely good way to actually learn
@@ -70,6 +76,7 @@ theSchultzYocto/                  <- this repo == the "schultz" layer
 └── docs/
     ├── build-host-setup.md
     ├── security-and-auditing.md
+    ├── rauc-ab-updates.md
     └── first-build.md
 ```
 
