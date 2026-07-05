@@ -130,11 +130,19 @@ def main():
             if len(parts) != 3:
                 continue
             name, arch, version = parts
+            purl = f"pkg:generic/{name}@{version}"
             component = {
+                # A stable, unique per-component handle. Not strictly required
+                # (this SBOM emits no dependency graph), and note the companion
+                # VEX does NOT key off it: Dependency-Track correlates a
+                # standalone VEX by its single root bom-ref, not per-component
+                # refs (see scripts/manifest-to-vex.py). Kept anyway as good
+                # CycloneDX practice -- every component gets a stable identity.
+                "bom-ref": purl,
                 "type": "library",
                 "name": name,
                 "version": version,
-                "purl": f"pkg:generic/{name}@{version}",
+                "purl": purl,
                 "properties": [{"name": "yocto:arch", "value": arch}],
             }
             cpe = resolve_cpe(name, cpe_map, recipes_by_len, pkgdata_dir) if cpe_map else None

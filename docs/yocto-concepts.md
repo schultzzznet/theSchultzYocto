@@ -245,11 +245,13 @@ So the real pipeline **doesn't** touch the `.spdx.json` at all. Instead,
 generates a minimal, valid CycloneDX **1.6** JSON document directly from
 Yocto's plain-text `.manifest` file (`<name> <arch> <version>` per line,
 emitted by every image build regardless of SPDX settings), using generic
-`pkg:generic/<name>@<version>` PURLs — a real, stated limitation, since
-there's no ecosystem-specific PURL type for Yocto/OE packages, so
-Dependency-Track's ecosystem-aware version matching (Alpine/Debian/Go/
-Maven/NPM/PyPI/RPM) won't kick in; it falls back to plain name+version
-matching, still enough for basic CVE tracking.
+`pkg:generic/<name>@<version>` PURLs — there's no ecosystem-specific PURL
+type for Yocto/OE packages, so Dependency-Track's ecosystem-aware version
+matching (Alpine/Debian/Go/Maven/NPM/PyPI/RPM) can't kick in. On their own,
+those generic PURLs made DT find **exactly zero** CVEs — nothing lines them
+up against NVD. Two more moves fix that: CPE enrichment (so DT finds the real
+CVEs) and a VEX round-trip (so it drops the ones Yocto already fixed), both
+detailed below.
 
 [scripts/upload-sbom.sh](../scripts/upload-sbom.sh) does the upload (reads
 `DTRACK_URL`/`DTRACK_API_KEY` from the environment, strips whitespace from
@@ -265,7 +267,116 @@ nothing changes. Verified end-to-end against both Dependency-Track v4.13.0
 and v5.0.2: 83/83 real packages land as components, fully processed through
 internal vulnerability analysis.
 
-This complements `cve-check` rather than duplicating it: `cve-check` is a
+The generic-PURL SBOM gets the package list into DT, but DT can't match a
+generic PURL against NVD — so the story has two more steps, both driven by the
+same `cve-check` data: feeding it *into* the SBOM (as CPEs), then reading its
+verdicts *back out* as a VEX.
+
+```mermaid
+flowchart LR
+  M[image .manifest] --> S[manifest-to-cyclonedx.py]
+  C[cve-check<br/>cve-summary.json] -->|CPE product + clean version| S
+  P[pkgdata runtime-reverse<br/>pkg → recipe PN] -->|resolve names| S
+  S --> B[CycloneDX SBOM<br/>components + CPEs] --> DT[(Dependency-Track)]
+  C -->|Patched / Ignored verdicts| V[manifest-to-vex.py]
+  P --> V
+  V --> X[CycloneDX VEX<br/>CVE-centric] --> DT
+  DT --> F[findings:<br/>only the real signal]
+```
+
+#### Step 1 — CPE enrichment: making DT find the real CVEs
+
+`cve-check` already does the hard part of Yocto→NVD identity: for every recipe,
+its `cve-summary.json` records the **CPE product** name it matched against NVD
+(`products[].product`) plus the clean upstream version. So
+`manifest-to-cyclonedx.py` attaches a real CPE to each component:
+`cpe:2.3:a:*:<product>:<version>:*:*:*:*:*:*:*`. Two deliberate choices:
+
+- **Vendor is left as ANY (`*`).** NVD vendors are inconsistent (glibc's vendor
+  is `gnu`, and so is bash's), and getting one wrong means *no* match. An
+  ANY-vendor CPE matches regardless — verified that DT honours it.
+- **The CPE version is cve-check's clean upstream version** (`1.36.1`), while
+  the component's own `version` keeps the manifest's `-r0` PR suffix
+  (`1.36.1-r0`). NVD matches on the CPE, so the CPE has to carry the version
+  NVD understands.
+
+The one wrinkle is names: the manifest lists *runtime package* names
+(`libssl3`, `libc6`, `libcurl4`) but cve-check keys on *recipe* names
+(`openssl`, `glibc`, `curl`). `tmp/pkgdata/.../runtime-reverse/<pkg>` has a
+`PN:` line that is the authoritative package→recipe map; the resolver uses that
+first, then an exact-name match, then longest recipe-name-prefix. Result:
+**81 of 83 components get a CPE** (the two that don't are `packagegroup-*`
+meta-packages with no compiled content), and DT's finding count went from
+**0 to ~100**. Those ~100 are real NVD matches against the versions in the image.
+
+#### Step 2 — the VEX round-trip: making DT drop the false positives
+
+~100 findings sounds alarming, but most are false positives, and it's Yocto's
+own doing in a good way: Yocto **backports** security fixes without bumping the
+upstream version. The shipped `busybox` is still `1.36.1`, its CPE still
+matches NVD's "vulnerable ≤ 1.36.x" range, and DT dutifully flags a CVE that
+was actually patched at build time. `cve-check` already knows the truth
+per-CVE (`Patched` / `Ignored` / `Unpatched`) — the job is to hand that verdict
+to DT so it stops crying wolf. That is exactly what a **VEX** (Vulnerability
+Exploitability eXchange) is for. [manifest-to-vex.py](../scripts/manifest-to-vex.py)
+maps each verdict:
+
+| cve-check says | VEX `analysis.state` | effect in DT |
+|---|---|---|
+| `Patched` | `resolved` | suppressed |
+| `Ignored` — cpe-incorrect / disputed | `false_positive` | suppressed |
+| `Ignored` — not-applicable-\* | `not_affected` (+ justification) | suppressed |
+| `Ignored` — upstream-wontfix | `in_triage` | kept visible |
+| `Unpatched` | *(omitted)* | stays active — the real signal |
+
+The hard-won lesson was **how DT correlates a standalone VEX**, and it cost a
+few rounds of "HTTP 200, zero effect." DT does **not** match a VEX's
+`affects[].ref` against the per-component PURLs stored in the project. It
+matches them **only against the VEX's own `metadata.component.bom-ref`** — the
+single root/firmware component. So the working VEX is *CVE-centric*, not
+per-component: one entry per CVE, and **every** `affects[].ref` is that same
+root ref. DT maps the root to the target project via the `project` field on the
+upload request and applies each verdict **project-wide, by CVE** (it suppresses
+that CVE on every component carrying it). `resolved` / `not_affected` /
+`false_positive` auto-suppress; `in_triage` just annotates. (DT's own VEX
+*export* confirms the shape — it writes the project UUID as both the root
+`bom-ref` and every `affects.ref`.)
+
+Two consequences fall out of "project-wide by CVE":
+
+- **Never suppress a CVE that's `Unpatched` anywhere in the image.** Because a
+  verdict applies to the whole project, resolving a CVE just because it's
+  patched in one recipe would also hide it on a recipe where it *isn't*. The
+  generator excludes any CVE that cve-check marks `Unpatched` in even one of
+  the image's recipes.
+- **Scope the VEX to the image's recipes.** cve-check's summary covers the
+  whole build closure (hundreds of recipes, most never shipped); a verdict for
+  every one produced a 13k-entry / 5 MB VEX that DT ground on for minutes.
+  Scoping to the recipes that actually produce the image's packages (the same
+  pkgdata map as Step 1) cuts it to **~1,150 entries / 440 KB**, processed in
+  seconds.
+
+Ordering matters: a VEX can only annotate findings that already exist, so
+[upload-sbom.sh](../scripts/upload-sbom.sh) uploads the SBOM, **polls the
+processing token to completion**, *then* generates and uploads the VEX
+(multipart — a 440 KB base64 body on a `curl` command line overflows the
+shell's argument limit).
+
+The measured result on one real build: **100 active findings → 46.** The 46
+that remain are exactly what's worth a human's attention:
+
+| remaining | count | what it is |
+|---|---|---|
+| genuinely unpatched | 38 | Yocto has no fix yet — act on these |
+| upstream-wontfix (`in_triage`) | 6 | Yocto acknowledges, won't fix — kept visible on purpose |
+| unknown to cve-check | 2 | new enough that DT's NVD mirror lists it but Yocto's cve-check DB doesn't yet — kept, conservatively |
+
+And the safety check that matters most: cross-referencing every *suppressed*
+finding against cve-check, **zero** genuinely-`Unpatched` CVEs were hidden.
+Every dismissal also carries its cve-check reason in `analysis.detail`, so DT
+shows *why* each was dropped — an auditable trail, not a silent mute.
+
+Even wired together like this, the two tools aren't redundant: `cve-check` is a
 one-shot, build-time check against NVD at the moment you build.
 Dependency-Track is continuous monitoring of a *living* SBOM — it catches
 CVEs disclosed against a package version *after* you already shipped it,
