@@ -27,9 +27,10 @@ recovering from a corrupted `tmp/`/`sstate-cache` after an unclean shutdown.
 Care about the supply-chain security angle?
 [docs/security-and-auditing.md](docs/security-and-auditing.md) is the deep
 dive: how the image's SBOM, CPE-matched CVEs, and cve-check-driven VEX fit
-together in Dependency-Track, what the once-a-day auto-scan keeps current, the
-trust and threat models (with their honest limits), and how to trace any single
-"this CVE is fine" decision all the way back to evidence.
+together in Dependency-Track (tracked as a project named after this repo,
+`theSchultzYocto`), what the once-a-day auto-scan keeps current, the trust and
+threat models (with their honest limits), and how to trace any single "this CVE
+is fine" decision all the way back to evidence.
 
 ## Why this exists
 

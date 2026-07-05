@@ -110,6 +110,14 @@ git branch --set-upstream-to=origin/master master`). Without it the pull simply
 skips and the scan rebuilds whatever is currently checked out — so recipe
 changes still land, they just have to arrive via `sync-to-host.sh` instead.
 
+**Naming.** The Dependency-Track *project* is named after the repo/layer —
+`theSchultzYocto` — so DT groups every build of it under one entry, matching how
+you think about the source. The image the SBOM actually describes
+(`schultz-image-minimal`) is recorded as the BOM's root component, not the DT
+project name, so nothing is lost: the project reads as the repo, the document
+still names the real firmware. (Override the project name with
+`DTRACK_PROJECT_NAME` if you ever track more than one repo in the same DT.)
+
 **Rolling vs dated projects.** The daily scan targets a single stable project
 version (`raspberrypi3-64-rolling` by default) that it updates *in place*, so
 you get one continuously-monitored "living SBOM" rather than 365 dated projects

@@ -10,7 +10,8 @@
 #   DTRACK_URL       e.g. https://dtrack.example.com
 #   DTRACK_API_KEY   API key for a team with BOM_UPLOAD permission
 # Optional:
-#   DTRACK_PROJECT_NAME     default: schultz-image-minimal
+#   DTRACK_PROJECT_NAME     default: theSchultzYocto (the repo/layer -- the DT
+#                           project groups every version of this firmware)
 #   DTRACK_PROJECT_VERSION  default: raspberrypi3-64-<today's date>
 #
 # Usage: DTRACK_URL=... DTRACK_API_KEY=... ./scripts/upload-sbom.sh
@@ -20,8 +21,14 @@ set -euo pipefail
 : "${DTRACK_URL:?Set DTRACK_URL, e.g. https://dtrack.example.com}"
 : "${DTRACK_API_KEY:?Set DTRACK_API_KEY}"
 
-PROJECT_NAME="${DTRACK_PROJECT_NAME:-schultz-image-minimal}"
+# The Dependency-Track PROJECT is named after the repo/layer (theSchultzYocto)
+# so DT groups all builds of it together. IMAGE_NAME is the actual firmware
+# component recorded *inside* the SBOM/VEX (the image recipe) -- keeping the two
+# separate means DT's project list reads as the repo while the BOM still names
+# the real artifact it describes.
+PROJECT_NAME="${DTRACK_PROJECT_NAME:-theSchultzYocto}"
 PROJECT_VERSION="${DTRACK_PROJECT_VERSION:-raspberrypi3-64-$(date +%Y%m%d)}"
+IMAGE_NAME="schultz-image-minimal"
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(dirname "$REPO_DIR")"
@@ -67,10 +74,10 @@ if [ -f "$CVE_SUMMARY" ]; then
   # pkgdata is the authoritative pkg->recipe map: it lets lib* package names
   # (libssl3 -> openssl, libc6 -> glibc) get CPEs too. Passing a missing dir is
   # harmless -- the generator just falls back to name/prefix matching.
-  python3 "$REPO_DIR/scripts/manifest-to-cyclonedx.py" "$MANIFEST" "$PROJECT_NAME" "$PROJECT_VERSION" "$CVE_SUMMARY" "$PKGDATA_DIR" > "$SBOM_CDX"
+  python3 "$REPO_DIR/scripts/manifest-to-cyclonedx.py" "$MANIFEST" "$IMAGE_NAME" "$PROJECT_VERSION" "$CVE_SUMMARY" "$PKGDATA_DIR" > "$SBOM_CDX"
 else
   echo "No cve-summary.json at $CVE_SUMMARY -- uploading with generic PURLs only (no CPEs; enable cve-check for real DT matching)." >&2
-  python3 "$REPO_DIR/scripts/manifest-to-cyclonedx.py" "$MANIFEST" "$PROJECT_NAME" "$PROJECT_VERSION" > "$SBOM_CDX"
+  python3 "$REPO_DIR/scripts/manifest-to-cyclonedx.py" "$MANIFEST" "$IMAGE_NAME" "$PROJECT_VERSION" > "$SBOM_CDX"
 fi
 archive_artifact "$SBOM_CDX" sbom.cdx.json
 
@@ -140,7 +147,7 @@ fi
 # Generate the VEX from cve-check and apply it. DT correlates a standalone VEX
 # by the single root bom-ref (not per-component), so this document is
 # CVE-centric -- see scripts/manifest-to-vex.py for the full rationale.
-python3 "$REPO_DIR/scripts/manifest-to-vex.py" "$MANIFEST" "$PROJECT_NAME" "$PROJECT_VERSION" "$CVE_SUMMARY" "$PKGDATA_DIR" > "$VEX_CDX"
+python3 "$REPO_DIR/scripts/manifest-to-vex.py" "$MANIFEST" "$IMAGE_NAME" "$PROJECT_VERSION" "$CVE_SUMMARY" "$PKGDATA_DIR" > "$VEX_CDX"
 archive_artifact "$VEX_CDX" vex.cdx.json
 
 # Multipart upload: the VEX can be several hundred KB, which overflows the
