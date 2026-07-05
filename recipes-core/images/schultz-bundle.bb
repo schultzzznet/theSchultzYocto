@@ -1,34 +1,32 @@
-# DISABLED BY DEFAULT -- kept as `.bb.example`, not `.bb`, on purpose.
+# RAUC update bundle for schultz-image-minimal (raspberrypi3-64).
 #
-# `inherit bundle` below requires classes/bundle.bbclass from the meta-rauc
-# layer, which this repo does NOT fetch or add to bblayers.conf by default
-# (see scripts/fetch-rauc-layers.sh -- opt-in, not run as part of a normal
-# build). BitBake parses every *.bb file matched by BBFILES up front,
-# regardless of build target, so leaving this as a real .bb file with no
-# meta-rauc in bblayers.conf hard-fails ANY bitbake invocation, not just a
-# build of this recipe. Learned that the hard way: it silently broke a
-# from-reboot rebuild of the unrelated schultz-image-minimal target.
+# Active recipe -- meta-rauc is in bblayers.conf. The A/B setup this targets
+# (U-Boot, dual-slot wic, slotted system.conf) is built in the dedicated
+# build-rauc/ dir from scripts/setup-rauc-build.sh, NOT the plain build/ dir
+# (whose image is a single rootfs partition). See docs/rauc-ab-updates.md.
 #
-# To actually use this recipe:
-#   1. ./scripts/fetch-rauc-layers.sh          (clones meta-rauc + meta-rauc-community)
-#   2. add meta-rauc to build/conf/bblayers.conf
-#   3. mv recipes-core/images/schultz-bundle.bb.example recipes-core/images/schultz-bundle.bb
-#   4. still need a real rauc-conf (system.conf/keyring) -- see docs/yocto-concepts.md
-#      for what's scaffolded vs. what's still needed.
+# Gotcha kept for posterity: `inherit bundle` needs meta-rauc's bundle.bbclass.
+# If you ever drop meta-rauc from bblayers, rename this to .bb.example --
+# BitBake parses every .bb up front, so a missing bundle.bbclass hard-fails
+# EVERY bitbake call, not just a build of this recipe.
 SUMMARY = "RAUC update bundle for schultz-image-minimal (raspberrypi3-64)"
 DESCRIPTION = "Builds a signed RAUC bundle wrapping schultz-image-minimal. \
-Real as of 2026-07-03: meta-rauc is in bblayers.conf, RAUC_KEY_FILE/ \
-RAUC_CERT_FILE point at real dev key material (scripts/generate-signing-keys.sh), \
-and recipes-core/rauc/ provides a real system.conf + keyring (rauc-conf.bbappend). \
-Still NOT real: on-target A/B installs. system.conf has no [slot.*] section --\
-that needs an actual A/B partition layout and U-Boot integration, which needs \
-physical hardware bring-up to verify. See docs/yocto-concepts.md."
+Signing uses RAUC_KEY_FILE/RAUC_CERT_FILE (scripts/generate-signing-keys.sh); \
+the on-target keyring + A/B slots live in recipes-core/rauc/ (rauc-conf.bbappend). \
+A/B on-target installs are wired as of 2026-07-05: system.conf defines \
+rootfs.0/rootfs.1 and scripts/setup-rauc-build.sh builds the dual-partition \
+image + U-Boot. Final proof is on physical hardware -- see docs/rauc-ab-updates.md."
 
 inherit bundle
 
 RAUC_BUNDLE_FORMAT = "verity"
 RAUC_BUNDLE_SLOTS = "rootfs"
 RAUC_SLOT_rootfs = "schultz-image-minimal"
+
+# Must equal the `compatible` in recipes-core/rauc/files/system.conf, or rauc
+# rejects the bundle on the target. Without this it defaults to
+# "${MACHINE}-${TARGET_VENDOR}" (raspberrypi3-64-poky), which would NOT match.
+RAUC_BUNDLE_COMPATIBLE = "theSchultzYocto-raspberrypi3-64"
 
 RAUC_KEY_FILE ?= "${TOPDIR}/../keys/development-1.key.pem"
 RAUC_CERT_FILE ?= "${TOPDIR}/../keys/development-1.cert.pem"
