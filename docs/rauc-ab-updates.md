@@ -142,6 +142,33 @@ one instead of bricking.**
   (`theSchultzYocto-raspberrypi3-64`) — RAUC's guard against flashing a bundle
   built for a different device.
 
+## Secure boot vs. signed updates — where the line honestly is
+
+These sound similar and get conflated constantly. They are not the same thing,
+and one of them the Pi 3 simply cannot do:
+
+- **Signed, integrity-checked updates — yes, we have this.** `rauc install`
+  verifies the bundle's signature against the on-device keyring and refuses
+  anything we didn't sign, and the `verity` bundle format gives dm-verity
+  block-level integrity of the slot's contents. That is real *update*
+  authenticity + integrity: an attacker can't push you a tampered or
+  third-party update.
+- **Hardware secure boot — no, and not on this board.** "Secure boot" proper is
+  a *verified chain* from the SoC boot ROM → bootloader → kernel, rooted in keys
+  fused into the chip. The Raspberry Pi 3's boot ROM loads `bootcode.bin` /
+  firmware / `u-boot.bin` from the FAT partition **unsigned** — there is no key
+  fusing and no signature check anywhere in its boot path. Anyone with physical
+  access to the SD card can alter `/boot` (or the rootfs) and the Pi will boot
+  it. This is a **hardware ceiling, not a configuration gap**: only Pi 4/5 have
+  even a limited signed-boot (bootloader EEPROM + a fused key), and full
+  measured/attested boot wants a TPM the Pi 3 doesn't have.
+
+The accurate one-liner: **RAUC here gives you update security (only your signed,
+integrity-checked bundles install onto verified A/B slots), not boot-chain
+attestation.** If this ever moves to a Pi 4/5, signed-boot becomes a real thing
+to layer underneath; on a Pi 3 it's out of reach and worth stating plainly
+rather than implying otherwise.
+
 ## Troubleshooting (serial console is your friend)
 
 | Symptom | Likely cause / fix |
