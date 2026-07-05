@@ -103,6 +103,13 @@ Install it once on the build host (cron, `03:30` local by default):
 ssh <build-host> '~/theSchultzYocto/scripts/install-daily-scan.sh 03:30'
 ```
 
+For step 1's `git pull` to refresh recipes hands-off, the host's layer checkout
+needs an `origin` remote tracking GitHub (one-time:
+`git remote add origin <url> && git fetch origin &&
+git branch --set-upstream-to=origin/master master`). Without it the pull simply
+skips and the scan rebuilds whatever is currently checked out — so recipe
+changes still land, they just have to arrive via `sync-to-host.sh` instead.
+
 **Rolling vs dated projects.** The daily scan targets a single stable project
 version (`raspberrypi3-64-rolling` by default) that it updates *in place*, so
 you get one continuously-monitored "living SBOM" rather than 365 dated projects
