@@ -21,7 +21,7 @@ in place, so a bad update can't brick the device.
 
 ```
 SD card (mmcblk0)
-├─ p1  /boot   FAT   RPi firmware + u-boot.bin + dtbs   (shared)
+├─ p1  /boot   FAT   RPi firmware + u-boot.bin + kernel + dtbs   (shared)
 ├─ p2  rootfs_A  ext4   slot A  ← booted now
 ├─ p3  rootfs_B  ext4   slot B  ← next update lands here
 ├─ p4  /data     ext4   RAUC state + shared data        (survives updates)
@@ -30,7 +30,8 @@ SD card (mmcblk0)
 Boot flow:  RPi firmware → u-boot.bin → boot.scr
   reads env BOOT_ORDER="A B", BOOT_A_LEFT/BOOT_B_LEFT (tries, default 3)
   → picks the first slot with tries left, decrements it, boots that rootfs
-  → kernel comes from THAT slot's /boot/Image, with root=/dev/mmcblk0pN rauc.slot=X
+  → boots with root=/dev/mmcblk0pN rauc.slot=X; the kernel is SHARED, loaded
+    from the FAT /boot partition (only the rootfs is A/B in this reference)
   a successful boot resets the tries; running out of tries falls back to the other slot
 ```
 
@@ -53,8 +54,9 @@ bitbake schultz-bundle          # → schultz-bundle-raspberrypi3-64.raucb (sign
 
 What the setup script layered on top of the normal config:
 `RPI_USE_U_BOOT=1`, `ENABLE_UART=1`, `INIT_MANAGER=systemd`,
-`WKS_FILE=sdimage-dual-raspberrypi.wks.in`, `IMAGE_FSTYPES += ext4`, and the
-kernel moved into each rootfs slot. The A/B slots + our signing keyring come
+`WKS_FILE=sdimage-dual-raspberrypi.wks.in`, and `IMAGE_FSTYPES += ext4`. (This
+scarthgap-era reference boots a shared kernel from `/boot`; only the rootfs is
+A/B.) The A/B slots + our signing keyring come
 from [recipes-core/rauc/](../recipes-core/rauc/); the bundle's `compatible`
 string is pinned in [schultz-bundle.bb](../recipes-core/images/schultz-bundle.bb)
 to match `system.conf` (a mismatch is the #1 reason `rauc install` refuses a

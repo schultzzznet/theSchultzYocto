@@ -44,9 +44,14 @@ else
 fi
 set -u
 
-# 3. Add the RAUC layers (add-layer is a no-op if already present).
-bitbake-layers add-layer "$WORK_DIR/meta-rauc" 2>/dev/null || true
-bitbake-layers add-layer "$WORK_DIR/meta-rauc-community/meta-rauc-raspberrypi" 2>/dev/null || true
+# 3. meta-rauc is already in the base template's bblayers; add only the RPi
+#    integration layer (meta-rauc-community is pinned to a scarthgap-compatible
+#    revision by fetch-rauc-layers.sh).
+if bitbake-layers show-layers 2>/dev/null | grep -q "meta-rauc-raspberrypi"; then
+  echo "meta-rauc-raspberrypi already added"
+else
+  bitbake-layers add-layer "$WORK_DIR/meta-rauc-community/meta-rauc-raspberrypi"
+fi
 
 # 4. Append the RAUC config block to local.conf exactly once (marker-guarded).
 LC="$WORK_DIR/build-rauc/conf/local.conf"
@@ -65,11 +70,9 @@ RPI_USE_U_BOOT = "1"
 INIT_MANAGER = "systemd"
 IMAGE_FSTYPES:append = " ext4"
 WKS_FILE = "sdimage-dual-raspberrypi.wks.in"
-# Kernel lives in each rootfs slot (so a slot boots its own kernel), not in the
-# shared FAT boot partition. meta-rauc-raspberrypi does this for core-image-
-# minimal via a bbappend; we set it here so it also applies to our image.
-IMAGE_INSTALL:append = " kernel-image kernel-modules"
-RPI_EXTRA_IMAGE_BOOT_FILES:remove = "${KERNEL_IMAGETYPE}"
+# Note: this (scarthgap-era) meta-rauc-raspberrypi boots a SHARED kernel from the
+# FAT /boot partition -- only the rootfs is A/B -- so we deliberately do NOT move
+# the kernel into the rootfs slots.
 # <<< theSchultzYocto RAUC A/B config <<<
 RAUCEOF
   echo "Appended RAUC config to $LC"
