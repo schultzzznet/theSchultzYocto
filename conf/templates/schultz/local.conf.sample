@@ -1,6 +1,14 @@
 # Machine Selection
 MACHINE ??= "raspberrypi3-64"
 
+# Serial console on the Pi 3's GPIO14/15 UART (header pins 8/10), 115200 8N1.
+# Without enable_uart=1 the Pi 3 mini-UART's baud drifts with the core clock and
+# you get pure garbage on the wire -- this pins it so a serial console (e.g. the
+# ESP32 bridge in tools/esp32-serial-bridge/) is actually readable. Cheap
+# insurance for a headless image you may need to debug when networking doesn't
+# come up. (The RAUC build in build-rauc/ sets this too.)
+ENABLE_UART = "1"
+
 # Reference distro policy - see docs/first-build.md for why we're not rolling
 # our own DISTRO yet.
 DISTRO ?= "poky"
