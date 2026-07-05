@@ -8,6 +8,10 @@ This repo *is* a Yocto layer (collection name `schultz`) — it doesn't contain
 Poky or the Raspberry Pi BSP layer itself; those get cloned alongside it on
 the Linux build machine (see [docs/first-build.md](docs/first-build.md)).
 
+Want the quick "what actually works" view? [docs/status.md](docs/status.md) is
+the status‑at‑a‑glance: what's verified on real hardware, what's built and
+wiring‑complete, and what's a hardware ceiling (like secure boot on a Pi 3).
+
 New to Yocto? [docs/yocto-concepts.md](docs/yocto-concepts.md) covers what it
 actually is, how a distro comes together, why this approach is worth the
 setup cost, and how updates/security work — grounded in this repo's own
