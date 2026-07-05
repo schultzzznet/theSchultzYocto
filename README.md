@@ -24,6 +24,13 @@ Build already running and you want to check on it (or it just died)?
 on a detached build, what does/doesn't survive a build-host reboot, and
 recovering from a corrupted `tmp/`/`sstate-cache` after an unclean shutdown.
 
+Care about the supply-chain security angle?
+[docs/security-and-auditing.md](docs/security-and-auditing.md) is the deep
+dive: how the image's SBOM, CPE-matched CVEs, and cve-check-driven VEX fit
+together in Dependency-Track, what the once-a-day auto-scan keeps current, the
+trust and threat models (with their honest limits), and how to trace any single
+"this CVE is fine" decision all the way back to evidence.
+
 ## Why this exists
 
 Short version: yes, RPi3 + Yocto is a genuinely good way to actually learn
@@ -56,9 +63,12 @@ theSchultzYocto/                  <- this repo == the "schultz" layer
 │   ├── fetch-layers.sh           <- clones poky + meta-raspberrypi as siblings
 │   ├── sync-to-host.sh           <- git-based sync to the build host (no scp/rsync)
 │   ├── remote-build.sh           <- runs ON the build host: bootstrap + launch build
+│   ├── upload-sbom.sh            <- push CycloneDX SBOM + VEX to Dependency-Track
+│   ├── daily-security-scan.sh    <- cron: rebuild + refresh SBOM/VEX daily
 │   └── deploy.sh                 <- sync + remote-build in one command, from the Mac
 └── docs/
     ├── build-host-setup.md
+    ├── security-and-auditing.md
     └── first-build.md
 ```
 

@@ -124,6 +124,7 @@ def main():
         recipes_by_len = sorted(cpe_map, key=len, reverse=True)  # longest-prefix wins
 
     components = []
+    with_cpe = 0
     with open(manifest_path) as f:
         for line in f:
             parts = line.split()
@@ -149,6 +150,7 @@ def main():
             if cpe:
                 vendor, product, cve_version = cpe
                 component["cpe"] = f"cpe:2.3:a:{vendor}:{product}:{cve_version}:*:*:*:*:*:*:*"
+                with_cpe += 1
             components.append(component)
 
     bom = {
@@ -169,6 +171,13 @@ def main():
 
     json.dump(bom, sys.stdout, indent=2)
     print()
+
+    # Audit summary to stderr: without CPEs Dependency-Track finds nothing, so a
+    # drop in coverage (e.g. after a pkgdata path change) is worth catching.
+    if cpe_map:
+        print(f"[manifest-to-cyclonedx] {with_cpe}/{len(components)} components got "
+              f"a CPE (the rest are normally packagegroups/meta pkgs w/o CVE data)",
+              file=sys.stderr)
 
 
 if __name__ == "__main__":

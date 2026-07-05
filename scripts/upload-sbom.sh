@@ -51,6 +51,18 @@ PKGDATA_DIR="$WORK_DIR/build/tmp/pkgdata/raspberrypi3-64/runtime-reverse"
 SBOM_CDX="$(mktemp /tmp/schultz-sbom-XXXXXX.cdx.json)"
 VEX_CDX="$(mktemp /tmp/schultz-vex-XXXXXX.cdx.json)"
 trap 'rm -f "$SBOM_CDX" "$VEX_CDX"' EXIT
+
+# Optional audit trail: if SBOM_ARCHIVE_DIR is set, keep a timestamped copy of
+# every SBOM and VEX actually generated (the temp files above are deleted on
+# exit). This is what an auditor reads to answer "what exactly did we assert
+# about this image, and when?" -- see docs/security-and-auditing.md.
+ARCHIVE_TS="$(date -u +%Y%m%dT%H%M%SZ)"
+archive_artifact() {  # archive_artifact <file> <suffix>
+  [ -n "${SBOM_ARCHIVE_DIR:-}" ] || return 0
+  mkdir -p "$SBOM_ARCHIVE_DIR"
+  cp "$1" "$SBOM_ARCHIVE_DIR/${PROJECT_NAME}-${PROJECT_VERSION}-${ARCHIVE_TS}.$2"
+}
+
 if [ -f "$CVE_SUMMARY" ]; then
   # pkgdata is the authoritative pkg->recipe map: it lets lib* package names
   # (libssl3 -> openssl, libc6 -> glibc) get CPEs too. Passing a missing dir is
@@ -60,6 +72,7 @@ else
   echo "No cve-summary.json at $CVE_SUMMARY -- uploading with generic PURLs only (no CPEs; enable cve-check for real DT matching)." >&2
   python3 "$REPO_DIR/scripts/manifest-to-cyclonedx.py" "$MANIFEST" "$PROJECT_NAME" "$PROJECT_VERSION" > "$SBOM_CDX"
 fi
+archive_artifact "$SBOM_CDX" sbom.cdx.json
 
 # Strip whitespace/newlines from the key -- a trailing \n in an API key
 # header causes a bare HTTP 400 with no response body, easy to mistake for
@@ -128,6 +141,7 @@ fi
 # by the single root bom-ref (not per-component), so this document is
 # CVE-centric -- see scripts/manifest-to-vex.py for the full rationale.
 python3 "$REPO_DIR/scripts/manifest-to-vex.py" "$MANIFEST" "$PROJECT_NAME" "$PROJECT_VERSION" "$CVE_SUMMARY" "$PKGDATA_DIR" > "$VEX_CDX"
+archive_artifact "$VEX_CDX" vex.cdx.json
 
 # Multipart upload: the VEX can be several hundred KB, which overflows the
 # shell's argument-length limit if base64'd into a JSON body on the command line.

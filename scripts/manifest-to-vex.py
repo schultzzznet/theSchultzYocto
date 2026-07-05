@@ -57,6 +57,7 @@ import json
 import os
 import sys
 import uuid
+from collections import Counter
 from datetime import datetime, timezone
 
 
@@ -131,14 +132,19 @@ def main():
 
     # Scope to the recipes that actually produce the image's packages.
     relevant_recipes = set()
+    manifest_pkgs = 0
+    unresolved = []
     with open(manifest_path) as f:
         for line in f:
             parts = line.split()
             if len(parts) != 3:
                 continue
+            manifest_pkgs += 1
             recipe = resolve_recipe(parts[0], issues_by_recipe, recipes_by_len, pkgdata_dir)
             if recipe:
                 relevant_recipes.add(recipe)
+            else:
+                unresolved.append(parts[0])
 
     # cve_id -> {"unpatched": bool, "cands": [(state, justification, note), ...]}
     cves = {}
@@ -202,6 +208,19 @@ def main():
     }
     json.dump(vex, sys.stdout, indent=2)
     print()
+
+    # Audit summary to stderr (the daily scan captures this in its log). This is
+    # the recipe-scoping tripwire: add or remove a recipe and these counts move.
+    # A collapse in "recipes scoped" or a spike in "unresolved" means the
+    # pkgdata map or the manifest path is wrong and the VEX is mis-scoped.
+    by_state = dict(Counter(v["analysis"]["state"] for v in vulnerabilities))
+    print(f"[manifest-to-vex] scoped {len(relevant_recipes)} recipes from "
+          f"{manifest_pkgs} manifest packages ({len(unresolved)} unresolved); "
+          f"{len(vulnerabilities)} VEX entries {by_state}", file=sys.stderr)
+    if unresolved:
+        print(f"[manifest-to-vex] unresolved (no recipe, not scoped -- normally "
+              f"just packagegroups/meta pkgs): {', '.join(sorted(unresolved))}",
+              file=sys.stderr)
 
 
 if __name__ == "__main__":

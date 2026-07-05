@@ -383,6 +383,18 @@ CVEs disclosed against a package version *after* you already shipped it,
 months later, without needing to rebuild anything. Feeding both from the
 same build gives you shift-left detection *and* ongoing coverage.
 
+To keep that coverage honest without a human in the loop,
+[scripts/daily-security-scan.sh](../scripts/daily-security-scan.sh) runs the
+whole chain once a day on the build host (install it with
+[scripts/install-daily-scan.sh](../scripts/install-daily-scan.sh)): it pulls any
+pushed recipe changes, rebuilds (refreshing the CVE database and regenerating
+the manifest, so the VEX's recipe-scoping always tracks the *current* image),
+then re-uploads the SBOM + freshly-scoped VEX and archives a timestamped copy of
+both. The deeper "what do we actually know, how do we keep it current, and how
+would we prove it in an audit" treatment — trust model, threat model, retention,
+and how to trace a single dismissal back to evidence — lives in
+[docs/security-and-auditing.md](security-and-auditing.md).
+
 ## Signing and OTA updates — what's real here vs. what's still a project
 
 This is the one area where it's worth being explicit about the line between
