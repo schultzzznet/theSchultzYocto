@@ -45,7 +45,9 @@ RAUC_BUNDLE_COMPATIBLE = "theSchultzYocto-raspberrypi3-64"
 # YYYY.MM.PATCH: bump PATCH when re-cutting a line with fresh Yocto-LTS backports
 # (2026.07.0 -> 2026.07.1), bump YYYY.MM for a new line. The codename tracks the
 # Yocto LTS base (scarthgap). See the versioning note in docs/security-and-auditing.md.
-RAUC_BUNDLE_VERSION = "2026.07.0"
+# Keep this in sync with IMAGE_VERSION in recipes-core/os-release/os-release.bbappend
+# (the device stamps the same CalVer into /etc/os-release).
+RAUC_BUNDLE_VERSION = "2026.07.1"
 
 RAUC_KEY_FILE ?= "${TOPDIR}/../keys/development-1.key.pem"
 RAUC_CERT_FILE ?= "${TOPDIR}/../keys/development-1.cert.pem"
