@@ -122,6 +122,31 @@ done
 } > "$R/PROVENANCE.txt"
 echo "archived -> $R"
 
+# 6b. Publish to Nexus (raw hosted repo) so devices pull the release from a
+#     stable URL: rauc install http://nexus/.../schultz-bundle-<v>.raucb. Nexus
+#     honours HTTP range requests, so RAUC *streams* into the slot (unlike a
+#     plain python http.server). Best-effort: needs keys/nexus.env; the repo is
+#     immutable (ALLOW_ONCE), so already-published files are skipped.
+[ -f "$WORK_DIR/keys/nexus.env" ] && { set -a; . "$WORK_DIR/keys/nexus.env"; set +a; }
+if [ -n "${NEXUS_URL:-}" ] && [ -n "${NEXUS_WRITE_USER:-}" ] && [ -n "${NEXUS_WRITE_PASS:-}" ]; then
+  NREPO="${NEXUS_REPO:-schultz-releases-raw}"
+  NBASE="$NEXUS_URL/repository/$NREPO/theSchultzYocto/$VERSION"
+  echo "-- publishing to Nexus: $NBASE --"
+  for f in "$R"/*; do
+    n="$(basename "$f")"
+    if curl -sfI -o /dev/null "$NBASE/$n"; then
+      echo "   = $n already published (immutable) -- skip"
+    elif curl -sf -u "$NEXUS_WRITE_USER:$NEXUS_WRITE_PASS" --upload-file "$f" "$NBASE/$n" -o /dev/null; then
+      echo "   + $n"
+    else
+      echo "   ! failed to publish $n (continuing)"
+    fi
+  done
+  echo "Nexus release URL: $NBASE/${BUNDLE}-${VERSION}.raucb"
+else
+  echo "no Nexus creds (keys/nexus.env) -- skipping publish (OTA can still use --local)"
+fi
+
 # 7. Tag the exact source state (best-effort push to origin).
 if [ "$DO_TAG" = 1 ] && [ -d "$REPO_DIR/.git" ]; then
   TAG="v$VERSION"

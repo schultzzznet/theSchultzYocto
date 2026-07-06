@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# One-time (idempotent) setup of 2 Nexus "raw" hosted repositories on the
+# One-time (idempotent) setup of 3 Nexus "raw" hosted repositories on the
 # Mac's existing Nexus instance (see
-# ../the-docker-swarm-ai/infra/dev-server/), for use as a Yocto
-# SOURCE_MIRROR_URL + SSTATE_MIRRORS target.
+# ../the-docker-swarm-ai/infra/dev-server/):
+#   - yocto-sources-raw    Yocto SOURCE_MIRROR_URL target
+#   - yocto-sstate-raw     Yocto SSTATE_MIRRORS target
+#   - schultz-releases-raw signed RAUC release bundles + A/B images that the
+#                          device pulls over the air (rauc install http://.../x.raucb)
 #
 # This is a genuinely new addition to that Nexus instance -- it only had
 # maven-public/npm-proxy/docker-hub-proxy configured before (checked
@@ -54,6 +57,24 @@ else
       "name": "yocto-sstate-raw",
       "online": true,
       "storage": {"blobStoreName": "default", "strictContentTypeValidation": false, "writePolicy": "ALLOW"},
+      "cleanup": {"policyNames": []}
+    }' \
+    "$NEXUS_URL/service/rest/v1/repositories/raw/hosted" \
+    && echo "    created."
+fi
+
+# ── schultz-releases-raw: signed RAUC bundles the device pulls OTA ────────────
+# writePolicy ALLOW_ONCE = a published <version>/ path can't be overwritten
+# (immutable releases); cut-release.sh checks-then-skips already-published files.
+if repo_exists schultz-releases-raw; then
+  echo "==> schultz-releases-raw already exists, skipping."
+else
+  echo "==> Creating schultz-releases-raw..."
+  curl -sf "${AUTH[@]}" -X POST -H "Content-Type: application/json" \
+    -d '{
+      "name": "schultz-releases-raw",
+      "online": true,
+      "storage": {"blobStoreName": "default", "strictContentTypeValidation": false, "writePolicy": "ALLOW_ONCE"},
       "cleanup": {"policyNames": []}
     }' \
     "$NEXUS_URL/service/rest/v1/repositories/raw/hosted" \
