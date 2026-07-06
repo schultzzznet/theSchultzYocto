@@ -17,7 +17,10 @@
 #                                   under build-rauc/releases/<version>/
 #   7. git tag v<version>        -- annotated; pushed to origin (best-effort)
 #
-# Options:  --no-build  --no-tag  --no-pull  [VERSION-override]
+# Options:  --no-build  --no-tag  --no-pull  --no-publish  [VERSION-override]
+# Variant builds (env; default = the standard bundle/image):
+#   SCHULTZ_BUNDLE=schultz-bundle-hardened SCHULTZ_IMAGE=schultz-image-hardened \
+#     scripts/cut-release.sh --no-tag --no-publish   # build-verify a variant
 # Idempotent: re-running a version re-snapshots DT + re-archives and skips an
 # already-existing tag.
 
@@ -29,16 +32,19 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(dirname "$REPO_DIR")"
 MACHINE="raspberrypi3-64"
-IMAGE="schultz-image-minimal"
-BUNDLE="schultz-bundle"
+# Variant-aware: default is the standard bundle/image; override via env to cut a
+# variant (e.g. the hardened squashfs bundle) through this same pipeline.
+IMAGE="${SCHULTZ_IMAGE:-schultz-image-minimal}"
+BUNDLE="${SCHULTZ_BUNDLE:-schultz-bundle}"
 IMAGES_DIR="$WORK_DIR/build-rauc/tmp/deploy/images/$MACHINE"
 
-DO_BUILD=1 DO_TAG=1 DO_PULL=1 VERSION_OVERRIDE=""
+DO_BUILD=1 DO_TAG=1 DO_PULL=1 DO_PUBLISH=1 VERSION_OVERRIDE=""
 for a in "$@"; do
   case "$a" in
-    --no-build) DO_BUILD=0 ;;
-    --no-tag)   DO_TAG=0 ;;
-    --no-pull)  DO_PULL=0 ;;
+    --no-build)   DO_BUILD=0 ;;
+    --no-tag)     DO_TAG=0 ;;
+    --no-pull)    DO_PULL=0 ;;
+    --no-publish) DO_PUBLISH=0 ;;
     -*) echo "unknown option: $a" >&2; exit 2 ;;
     *)  VERSION_OVERRIDE="$a" ;;
   esac
@@ -55,12 +61,13 @@ if [ "$DO_PULL" = 1 ] && [ -d "$REPO_DIR/.git" ]; then
 fi
 
 # 2. Version = RAUC_BUNDLE_VERSION (single source of truth) unless overridden.
-BUNDLE_VER="$(read_var "$REPO_DIR/recipes-core/images/schultz-bundle.bb" RAUC_BUNDLE_VERSION)"
+BUNDLE_VER="$(read_var "$REPO_DIR/recipes-core/images/${BUNDLE}.bb" RAUC_BUNDLE_VERSION)"
 IMAGE_VER="$(read_var "$REPO_DIR/recipes-core/os-release/os-release.bbappend" IMAGE_VERSION)"
 VERSION="${VERSION_OVERRIDE:-$BUNDLE_VER}"
-[ -n "$VERSION" ] || { echo "could not read a release version from schultz-bundle.bb" >&2; exit 1; }
-if [ -n "$IMAGE_VER" ] && [ "$IMAGE_VER" != "$VERSION" ]; then
-  echo "WARNING: os-release IMAGE_VERSION ($IMAGE_VER) != release ($VERSION); bump both to match." >&2
+[ -n "$VERSION" ] || { echo "could not read RAUC_BUNDLE_VERSION from ${BUNDLE}.bb" >&2; exit 1; }
+# Compare against the os-release stamp ignoring any -qualifier (e.g. -hardened).
+if [ -n "$IMAGE_VER" ] && [ "$IMAGE_VER" != "${VERSION%%-*}" ]; then
+  echo "WARNING: os-release IMAGE_VERSION ($IMAGE_VER) != release (${VERSION%%-*}); bump both to match." >&2
 fi
 echo "==== cutting release $VERSION ===="
 
@@ -91,19 +98,22 @@ fi
 R="$WORK_DIR/build-rauc/releases/$VERSION"
 mkdir -p "$R"
 [ -f "$WORK_DIR/keys/dtrack.env" ] && { set -a; . "$WORK_DIR/keys/dtrack.env"; set +a; }
-if [ -n "${DTRACK_URL:-}" ] && [ -f "$WORK_DIR/keys/dtrack-api-key" ]; then
+if [ "$DO_PUBLISH" = 1 ] && [ -n "${DTRACK_URL:-}" ] && [ -f "$WORK_DIR/keys/dtrack-api-key" ]; then
   export DTRACK_API_KEY="$(cat "$WORK_DIR/keys/dtrack-api-key")"
   export SCHULTZ_BUILD_SUBDIR="build-rauc"
+  export SCHULTZ_IMAGE_NAME="$IMAGE"
   export DTRACK_PROJECT_VERSION="$VERSION"
   export SBOM_ARCHIVE_DIR="$R"
   echo "-- Dependency-Track snapshot as $VERSION --"
   "$REPO_DIR/scripts/upload-sbom.sh" || echo "DT snapshot failed (continuing archive)"
-else
+elif [ "$DO_PUBLISH" = 1 ]; then
   echo "no DT creds (keys/dtrack.env + keys/dtrack-api-key) -- skipping DT snapshot"
+else
+  echo "--no-publish: skipping DT snapshot"
 fi
 
 cp -Lf "$RAUCB" "$R/${BUNDLE}-${VERSION}.raucb"
-for ext in wic.gz wic.bz2; do
+for ext in wic.gz wic.bz2 squashfs; do
   SRC="$IMAGES_DIR/${IMAGE}-${MACHINE}.rootfs.$ext"
   [ -f "$SRC" ] && { cp -Lf "$SRC" "$R/schultz-ab-image-${VERSION}.$ext"; break; }
 done
@@ -118,7 +128,7 @@ done
   echo
   echo "rauc bundle Version: $VERSION"
   echo "Artifacts (sha256):"
-  (cd "$R" && sha256sum ./*.raucb ./*.wic.* 2>/dev/null)
+  (cd "$R" && sha256sum ./*.raucb ./*.wic.* ./*.squashfs 2>/dev/null)
 } > "$R/PROVENANCE.txt"
 echo "archived -> $R"
 
@@ -128,7 +138,7 @@ echo "archived -> $R"
 #     plain python http.server). Best-effort: needs keys/nexus.env; the repo is
 #     immutable (ALLOW_ONCE), so already-published files are skipped.
 [ -f "$WORK_DIR/keys/nexus.env" ] && { set -a; . "$WORK_DIR/keys/nexus.env"; set +a; }
-if [ -n "${NEXUS_URL:-}" ] && [ -n "${NEXUS_WRITE_USER:-}" ] && [ -n "${NEXUS_WRITE_PASS:-}" ]; then
+if [ "$DO_PUBLISH" = 1 ] && [ -n "${NEXUS_URL:-}" ] && [ -n "${NEXUS_WRITE_USER:-}" ] && [ -n "${NEXUS_WRITE_PASS:-}" ]; then
   NREPO="${NEXUS_REPO:-schultz-releases-raw}"
   NBASE="$NEXUS_URL/repository/$NREPO/theSchultzYocto/$VERSION"
   echo "-- publishing to Nexus: $NBASE --"
@@ -143,8 +153,10 @@ if [ -n "${NEXUS_URL:-}" ] && [ -n "${NEXUS_WRITE_USER:-}" ] && [ -n "${NEXUS_WR
     fi
   done
   echo "Nexus release URL: $NBASE/${BUNDLE}-${VERSION}.raucb"
-else
+elif [ "$DO_PUBLISH" = 1 ]; then
   echo "no Nexus creds (keys/nexus.env) -- skipping publish (OTA can still use --local)"
+else
+  echo "--no-publish: skipping Nexus publish"
 fi
 
 # 7. Tag the exact source state (best-effort push to origin).

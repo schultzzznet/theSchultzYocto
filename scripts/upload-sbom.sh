@@ -33,7 +33,7 @@ PROJECT_NAME="${DTRACK_PROJECT_NAME:-theSchultzYocto}"
 # the daily living SBOM. The fallback is a build id, not a release -- set
 # DTRACK_PROJECT_VERSION explicitly when cutting a real release.
 PROJECT_VERSION="${DTRACK_PROJECT_VERSION:-build-$(date -u +%Y%m%dT%H%M%SZ)}"
-IMAGE_NAME="schultz-image-minimal"
+IMAGE_NAME="${SCHULTZ_IMAGE_NAME:-schultz-image-minimal}"
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(dirname "$REPO_DIR")"
@@ -43,10 +43,10 @@ WORK_DIR="$(dirname "$REPO_DIR")"
 # to "build-rauc" to snapshot the A/B RAUC image instead (e.g. for a dated
 # release of what actually ships to hardware). See docs/security-and-auditing.md.
 BUILD_SUBDIR="${SCHULTZ_BUILD_SUBDIR:-build}"
-MANIFEST="$WORK_DIR/$BUILD_SUBDIR/tmp/deploy/images/raspberrypi3-64/schultz-image-minimal-raspberrypi3-64.rootfs.manifest"
+MANIFEST="$WORK_DIR/$BUILD_SUBDIR/tmp/deploy/images/raspberrypi3-64/${IMAGE_NAME}-raspberrypi3-64.rootfs.manifest"
 
 if [ ! -f "$MANIFEST" ]; then
-  echo "No manifest at $MANIFEST -- build schultz-image-minimal first." >&2
+  echo "No manifest at $MANIFEST -- build ${IMAGE_NAME} first." >&2
   exit 1
 fi
 
