@@ -116,6 +116,52 @@ The numbered sections below are the same flow done by hand, for understanding.
 
 ---
 
+## Hardened variant (opt-in): squashfs + immutable root
+
+For a fielded device (vs. the learning sandbox) there's a ready-made hardened
+flavour, built from the same layer:
+[schultz-image-hardened.bb](../recipes-core/images/schultz-image-hardened.bb) +
+[schultz-bundle-hardened.bb](../recipes-core/images/schultz-bundle-hardened.bb).
+It drops `debug-tweaks` (no empty root password / passwordless SSH), adds
+`read-only-rootfs`, and ships the rootfs as **squashfs** — read-only at the
+*format* level, so unlike ext4-mounted-read-only it cannot be `mount -o
+remount,rw`'d. Nothing on the running root can be altered or persisted; a reboot
+returns to the pristine image.
+
+Cut it through the **same** pipeline (no hand-rolled bitbake — the scripts are
+variant-aware via `SCHULTZ_BUNDLE`/`SCHULTZ_IMAGE`):
+
+```sh
+ssh rpi5g16nvme 'SCHULTZ_BUNDLE=schultz-bundle-hardened SCHULTZ_IMAGE=schultz-image-hardened \
+  ~/theSchultzYocto/scripts/cut-release.sh --no-tag --no-publish'
+```
+
+`--no-publish`/`--no-tag` build + verify + archive locally with no DT/Nexus/tag
+side effect (drop them for a real hardened release once it's boot-proven).
+
+**Verified:** builds a **signed verity bundle with a squashfs rootfs slot**,
+`Version 2026.07.1-hardened`, same compatible string. The squashfs slot is
+**35 MB vs the ext4 image's 164 MB** — compressed, and it sidesteps the
+`mkfs.ext4` gap entirely (a read-only image is just written to the slot).
+
+**Boot-time caveats (the last mile, not yet on-hardware):**
+- **Slot type.** A squashfs slot wants `system.conf` slot `type=raw` (RAUC writes
+  it block-for-block and must not run ext4 operations on it). The running
+  system's `system.conf` governs this, so moving a device onto the hardened
+  track is a fresh flash / slot-type change, not a drop-in OTA over the ext4 image.
+- **SSH host keys.** `read-only-rootfs` bakes them at build time, so every device
+  would share them. For per-device keys, persist `/etc/ssh` onto `/data` and
+  regenerate on first boot.
+- **A login credential.** With `debug-tweaks` gone, add an `authorized_keys` (or a
+  hashed root password) or the device is locked (secure, but you can't get in).
+
+**Stronger still (follow-on):** put the squashfs on **dm-verity** for continuous
+runtime integrity (every block hash-checked against a signed root) — that turns
+"immutable" into "immutable *and* tamper-evident". More than a one-liner (needs an
+initramfs + the verity setup); the natural next tier once boot is proven.
+
+---
+
 ## 1. Build it
 
 On the build host (this uses a **separate `build-rauc/`** dir so it never

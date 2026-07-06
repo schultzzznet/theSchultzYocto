@@ -97,6 +97,12 @@ INHERIT += "cve-check"
 # capability is gone from THAT signed A/B release (and auditable in its
 # PROVENANCE.txt). Full "four layers" writeup in docs/yocto-concepts.md.
 #
+# For a full locked-down flavour there's a ready-made hardened image + bundle
+# (squashfs + read-only-rootfs + no debug-tweaks): recipes-core/images/
+# schultz-image-hardened.bb + schultz-bundle-hardened.bb, cut via cut-release.sh
+# with SCHULTZ_BUNDLE=schultz-bundle-hardened SCHULTZ_IMAGE=schultz-image-hardened
+# (see docs/rauc-ab-updates.md, "Hardened variant").
+#
 # 1. Drop debug-tweaks (empty root password + passwordless SSH) -- the single
 #    highest-value change for a locked-down build. It's set in the image
 #    recipe; remove it globally from here:

@@ -45,6 +45,7 @@ Deep dive: [security-and-auditing.md](security-and-auditing.md).
 | Signed + integrity-checked bundles | ✅ | `verity` (dm-verity) + signed; device keyring = our dev cert — signature verified on-device at install |
 | Release artifact store + OTA source | ✅ | each release published to the Nexus raw repo `schultz-releases-raw`; the Pi `rauc install`s **straight from Nexus** (HTTP range → true streaming, no scp) via `ota-deploy.sh <version> <ip> --reboot` |
 | Scripted release cut | ✅ | `cut-release.sh`: build → verify `rauc info` == version → SBOM/VEX to DT → archive + `PROVENANCE.txt` → publish to Nexus → git tag |
+| Hardened variant (squashfs, immutable) | 🟢 | `schultz-image-hardened`/`schultz-bundle-hardened`: no debug-tweaks + read-only-rootfs + **squashfs** (format-level RO). Signed verity bundle built + verified via the variant-aware `cut-release.sh` (35 MB squashfs slot vs 164 MB ext4); on-board RO-root boot is the last mile |
 | Hardware secure boot | ❌ | the Pi 3 boot ROM loads firmware from the FAT partition **unsigned** — a hardware ceiling, not a config gap (needs Pi 4/5 + fused keys / TPM) |
 
 Deep dive + the on-hardware rollback demo: [rauc-ab-updates.md](rauc-ab-updates.md).
