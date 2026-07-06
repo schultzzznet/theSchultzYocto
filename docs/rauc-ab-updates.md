@@ -221,6 +221,7 @@ rather than implying otherwise.
 | U-Boot loops "No valid RAUC slot found" | both slots out of tries → it resets tries to 3 and retries; if persistent, the kernel/rootfs in the slot isn't booting (watch the kernel log) |
 | `rauc install` → "compatible mismatch" | bundle `RAUC_BUNDLE_COMPATIBLE` ≠ system `compatible` — both must be `theSchultzYocto-raspberrypi3-64` |
 | `rauc install` → signature/keyring error | device keyring isn't the cert that signed the bundle — rebuild the image so `/etc/rauc/development-1.cert.pem` matches your signing key |
+| `rauc install` → "failed to run mkfs.ext4" at ~99% | the minimal image ships no `mkfs.ext4` (no `e2fsprogs-mke2fs`, no package manager). Fixed by shipping the rootfs as a raw `ext4` image (`RAUC_SLOT_rootfs[fstype]="ext4"` in [schultz-bundle.bb](../recipes-core/images/schultz-bundle.bb)) so RAUC writes it block-for-block instead of formatting+extracting a tar. Small-bundle alternative: add `e2fsprogs-mke2fs` to the image `IMAGE_INSTALL` and keep the tar |
 | Update installs but won't boot | that's the rollback case — let it fall back to the good slot, then debug the new slot over serial |
 
 ## Honest caveats
