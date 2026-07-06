@@ -5,10 +5,11 @@ This is the real thing: **atomic, rollback-safe OTA updates** for
 from meta-rauc-community's `meta-rauc-raspberrypi` reference. It's the follow-on
 to the plain single-partition image in [first-build.md](first-build.md).
 
-> **Status (2026-07-05):** fully *wired and built*; the final "does it actually
-> boot and roll back on the board" proof is a hands-on step with a serial
-> console (which is exactly what this doc walks through). Everything up to
-> flashing is verified; the on-hardware behaviour is yours to confirm.
+> **Status (2026-07-06):** ✅ *verified end-to-end on real hardware* — booted on
+> a Raspberry Pi 3 B+, updated **over the air** (`2026.07.0` → `2026.07.1`) with
+> zero downtime, and rolled back on demand (serial slot trace `A → B → A`). The
+> whole flow is scripted and git-synced (see "The automated flow" below); the
+> numbered sections then walk the manual steps for understanding.
 
 ---
 
@@ -37,6 +38,67 @@ Boot flow:  RPi firmware → u-boot.bin → boot.scr
 
 `rauc` on the target flips `BOOT_ORDER` / resets the tries via `u-boot-fw-utils`
 (`fw_setenv`), so the whole A/B decision lives in the U-Boot environment.
+
+### The update + rollback lifecycle
+
+```mermaid
+flowchart TD
+    A["Running: slot A"] -->|"rauc install (streamed, signed)"| W["slot B written<br/>A keeps running — zero downtime"]
+    W -->|"RAUC flips BOOT_ORDER: A B → B A"| ARM["slot B armed for next boot"]
+    ARM -->|reboot| TRY{"U-Boot tries slot B<br/>BOOT_B_LEFT = 3"}
+    TRY -->|"boots OK → rauc mark-good"| B["Running: slot B (new version)"]
+    TRY -->|"fails 3× / marked bad"| RB["U-Boot auto-rollback"]
+    RB --> A
+    B -.->|"next update lands on the now-idle slot A"| A
+```
+
+---
+
+## The automated flow (scripts, git-synced, no scp/rsync)
+
+The whole release + OTA pipeline is two scripts that run **on the build host**.
+Source reaches the host only via **git** ([sync-to-host.sh](../scripts/sync-to-host.sh)
+is git-over-ssh, or just `git push` + the host's `git pull`); the *device* gets
+the update by **streaming it over HTTP** — no `scp`/`rsync` anywhere.
+
+```mermaid
+flowchart LR
+    subgraph WS["workstation"]
+      E["edit recipes,<br/>bump version"]
+    end
+    subgraph HOST["build host (rpi5)"]
+      direction TB
+      CR["cut-release.sh<br/>build → verify → SBOM/VEX → archive → git tag"]
+      OD["ota-deploy.sh<br/>tiny HTTP update server"]
+    end
+    subgraph DEV["Raspberry Pi 3 B+"]
+      R["rauc install http://rpi5:8099/…<br/>streams into the idle A/B slot"]
+    end
+    E -->|"git push  (no scp/rsync)"| CR --> OD -->|"HTTP stream  (no scp)"| R
+```
+
+- **Cut a release** — bump `RAUC_BUNDLE_VERSION` (in
+  [schultz-bundle.bb](../recipes-core/images/schultz-bundle.bb)) **and**
+  `IMAGE_VERSION` (in [os-release.bbappend](../recipes-core/os-release/os-release.bbappend));
+  they are the same CalVer `YYYY.MM.PATCH`. Commit + push, then:
+  ```sh
+  ssh rpi5g16nvme '~/theSchultzYocto/scripts/cut-release.sh'
+  ```
+  It git-pulls, builds the A/B image + signed bundle, verifies `rauc info` matches
+  the version, snapshots the SBOM+VEX to Dependency-Track as an immutable version,
+  archives bundle+image+SBOM+VEX+`PROVENANCE.txt` under
+  `build-rauc/releases/<version>/`, and tags `v<version>`.
+- **Deploy it over the air** —
+  ```sh
+  ssh rpi5g16nvme '~/theSchultzYocto/scripts/ota-deploy.sh 2026.07.1 192.168.1.226 --reboot'
+  ```
+  The host serves the bundle over HTTP; the device runs
+  `rauc install http://<host>:8099/…` and **streams** the signed bundle straight
+  into its inactive slot (RAUC checks the signature as it streams — nothing lands
+  on the Pi's disk), then reboots into it and self-reports the new `IMAGE_VERSION`
+  from `/etc/os-release`. The old slot stays as a one-reboot rollback.
+
+The numbered sections below are the same flow done by hand, for understanding.
 
 ---
 
