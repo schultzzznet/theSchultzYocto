@@ -54,12 +54,18 @@ flowchart TD
 
 ---
 
-## The automated flow (scripts, git-synced, no scp/rsync)
+## The automated flow (git-synced, no scp/rsync)
 
-The whole release + OTA pipeline is two scripts that run **on the build host**.
-Source reaches the host only via **git** ([sync-to-host.sh](../scripts/sync-to-host.sh)
-is git-over-ssh, or just `git push` + the host's `git pull`); the *device* gets
-the update by **streaming it over HTTP** — no `scp`/`rsync` anywhere.
+Three systems, three jobs — and **no `scp`/`rsync` anywhere**:
+
+- **Git** — source of truth. Recipes/scripts reach the build host only via git
+  ([sync-to-host.sh](../scripts/sync-to-host.sh) is git-over-ssh, or just
+  `git push` + the host's `git pull`); each release is an annotated tag.
+- **Nexus** (raw repo `schultz-releases-raw`, on the same Nexus that already
+  backs our sstate/source mirror) — the **binary artifact store**. The signed
+  `.raucb` bundle + A/B image live here; the device pulls from a stable URL.
+- **Dependency-Track** — the **SBOM/VEX** (what's inside + CVE status). *Not* a
+  binary store: the image bits never go here.
 
 ```mermaid
 flowchart LR
@@ -67,14 +73,20 @@ flowchart LR
       E["edit recipes,<br/>bump version"]
     end
     subgraph HOST["build host (rpi5)"]
+      CR["cut-release.sh<br/>build → verify → tag"]
+    end
+    subgraph SRV["home-lab services"]
       direction TB
-      CR["cut-release.sh<br/>build → verify → SBOM/VEX → archive → git tag"]
-      OD["ota-deploy.sh<br/>tiny HTTP update server"]
+      NX["Nexus raw repo<br/>schultz-releases-raw<br/>(signed .raucb + image)"]
+      DT["Dependency-Track<br/>(SBOM / VEX)"]
     end
     subgraph DEV["Raspberry Pi 3 B+"]
-      R["rauc install http://rpi5:8099/…<br/>streams into the idle A/B slot"]
+      R["rauc install http://nexus/…<br/>range-streams into the idle slot"]
     end
-    E -->|"git push  (no scp/rsync)"| CR --> OD -->|"HTTP stream  (no scp)"| R
+    E -->|"git push (no scp/rsync)"| CR
+    CR -->|"publish .raucb + image"| NX
+    CR -->|"upload SBOM / VEX"| DT
+    NX -->|"HTTP range-stream (no scp)"| R
 ```
 
 - **Cut a release** — bump `RAUC_BUNDLE_VERSION` (in
@@ -85,18 +97,20 @@ flowchart LR
   ssh rpi5g16nvme '~/theSchultzYocto/scripts/cut-release.sh'
   ```
   It git-pulls, builds the A/B image + signed bundle, verifies `rauc info` matches
-  the version, snapshots the SBOM+VEX to Dependency-Track as an immutable version,
-  archives bundle+image+SBOM+VEX+`PROVENANCE.txt` under
-  `build-rauc/releases/<version>/`, and tags `v<version>`.
+  the version, snapshots the SBOM+VEX to Dependency-Track, archives
+  bundle+image+SBOM+VEX+`PROVENANCE.txt` under `build-rauc/releases/<version>/`,
+  **publishes them to the Nexus raw repo**, and tags `v<version>`.
 - **Deploy it over the air** —
   ```sh
   ssh rpi5g16nvme '~/theSchultzYocto/scripts/ota-deploy.sh 2026.07.1 192.168.1.226 --reboot'
   ```
-  The host serves the bundle over HTTP; the device runs
-  `rauc install http://<host>:8099/…` and **streams** the signed bundle straight
-  into its inactive slot (RAUC checks the signature as it streams — nothing lands
-  on the Pi's disk), then reboots into it and self-reports the new `IMAGE_VERSION`
-  from `/etc/os-release`. The old slot stays as a one-reboot rollback.
+  The device runs `rauc install http://<nexus>/repository/schultz-releases-raw/…`
+  and **streams** the signed bundle straight from Nexus into its inactive slot —
+  Nexus honours HTTP range requests, so nothing lands on the Pi's disk (RAUC
+  checks the signature as it streams). It then reboots and self-reports the new
+  `IMAGE_VERSION` from `/etc/os-release`; the old slot stays as a one-reboot
+  rollback. (`--local` falls back to an ephemeral HTTP server on the build host
+  when Nexus is unreachable.)
 
 The numbered sections below are the same flow done by hand, for understanding.
 

@@ -74,10 +74,19 @@ reboot_verify() {
   [ "$REBOOT" = 1 ] || return 0
   echo ">>> rebooting into the new slot ..."
   "${SSH[@]}" "$TARGET" 'reboot' >/dev/null 2>&1 || true
-  echo ">>> reconnecting + verifying (ssh ConnectionAttempts handles the wait) ..."
-  ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=6 -o ConnectionAttempts=45 "$TARGET" \
-    'echo "-- /etc/os-release --"; grep -E "IMAGE_ID|IMAGE_VERSION|^VERSION=" /etc/os-release; echo "-- rauc --"; rauc status | grep -E "Booted from|Activated|boot status"' \
-    || echo "could not reconnect after reboot -- check serial/power"
+  echo ">>> reconnecting + verifying (retries through the sshd-startup window) ..."
+  # ssh ConnectionAttempts only retries TCP connect failures, not the
+  # "kex_exchange_identification: Connection reset" you get while sshd is still
+  # coming up -- so loop on the whole ssh+command instead.
+  local i
+  for i in $(seq 1 60); do
+    if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 "$TARGET" \
+        'echo "-- /etc/os-release --"; grep -E "IMAGE_ID|IMAGE_VERSION|^VERSION=" /etc/os-release; echo "-- rauc --"; rauc status | grep -E "Booted from|Activated|boot status"' 2>/dev/null; then
+      return 0
+    fi
+    sleep 2
+  done
+  echo "could not reconnect after reboot -- check serial/power"
 }
 
 # ---- default: pull from Nexus (true streaming, stable URL) ----

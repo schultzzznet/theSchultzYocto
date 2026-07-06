@@ -217,9 +217,18 @@ mirror is still lightly populated.
 
 Beyond mirrors, Nexus's format-aware repo types (Debian, RPM, apt) can host
 an actual package feed if you ever want field updates via `opkg`/`apt`
-instead of full image re-flashes — and its raw/generic repos are a normal
-place to publish the final `.wic.bz2` images as versioned release
-artifacts, same as any other build output.
+instead of full image re-flashes. And this is now real for **release
+artifacts**: [scripts/setup-nexus-mirror.sh](../scripts/setup-nexus-mirror.sh)
+also creates a third raw repo, `schultz-releases-raw`, where
+[cut-release.sh](../scripts/cut-release.sh) publishes each signed `.raucb`
+bundle + A/B image. The device then updates straight from it —
+`rauc install http://nexus/repository/schultz-releases-raw/…` — and because
+Nexus honours HTTP range requests, RAUC *streams* the bundle into the idle
+slot instead of downloading it whole first (a plain `python -m http.server`
+can't: it has no range support, so it falls back to a full download). So Nexus
+is both the build cache **and** the OTA artifact server: the binary lives here,
+the SBOM lives in Dependency-Track, and git holds the source. See
+[rauc-ab-updates.md](rauc-ab-updates.md) for the full flow.
 
 ### Dependency-Track — this one's real now, not just described
 
