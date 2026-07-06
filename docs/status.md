@@ -4,9 +4,12 @@ A living snapshot of what's built, what's **verified on real hardware**, and
 what's deliberately out of reach. Last updated **2026-07-06** (signed A/B OTA
 with automatic rollback, verified end-to-end on a Raspberry Pi 3 B+).
 
-**Latest release:** `2026.07.0` (codename `scarthgap`) — Ubuntu-style CalVer,
-built on Yocto 5.0.19 LTS, pinned by git tag `v2026.07.0` and its
-`PROVENANCE.txt`. The `rolling` line tracks scarthgap point-releases nightly.
+**Latest release:** `2026.07.1` (codename `scarthgap`) — Ubuntu-style CalVer,
+built on Yocto 5.0.19 LTS, pinned by git tag `v2026.07.1` and its
+`PROVENANCE.txt`. The device **self-reports** it via `/etc/os-release`
+(`IMAGE_ID=theschultzyocto`, `IMAGE_VERSION=2026.07.1`), and it was delivered to
+the running Pi **over the air** (`2026.07.0` → `2026.07.1`, slot A → B) with no
+re-flash. The `rolling` line tracks scarthgap point-releases nightly.
 
 **Legend:** ✅ verified on hardware · 🟢 built &amp; wired (on-hardware proof
 pending) · ❌ not possible here (with reason)
@@ -38,7 +41,7 @@ Deep dive: [security-and-auditing.md](security-and-auditing.md).
 | Capability | Status | Notes |
 |---|---|---|
 | A/B dual-slot boot (U-Boot) | ✅ | verified 2026-07-06: U-Boot booted slot A, then B after an update, then rolled back to A (serial trace `A → B → A`) |
-| OTA update (`rauc install`) | ✅ | installed to inactive slot B, reboot switched to B; a marked-bad slot auto-rolled back to A |
+| OTA update (`rauc install`) | ✅ | delivered **over the network** to the *running* Pi (`2026.07.0`→`2026.07.1`) with zero downtime: written to idle slot B, one reboot switched to B, `/etc/os-release` flipped; a marked-bad slot auto-rolled back to A |
 | Signed + integrity-checked bundles | ✅ | `verity` (dm-verity) + signed; device keyring = our dev cert — signature verified on-device at install |
 | Hardware secure boot | ❌ | the Pi 3 boot ROM loads firmware from the FAT partition **unsigned** — a hardware ceiling, not a config gap (needs Pi 4/5 + fused keys / TPM) |
 
