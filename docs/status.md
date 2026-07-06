@@ -1,8 +1,12 @@
 # theSchultzYocto — status at a glance
 
 A living snapshot of what's built, what's **verified on real hardware**, and
-what's deliberately out of reach. Last updated **2026-07-05** (first real boot
-on a Raspberry Pi 3 B+).
+what's deliberately out of reach. Last updated **2026-07-06** (signed A/B OTA
+with automatic rollback, verified end-to-end on a Raspberry Pi 3 B+).
+
+**Latest release:** `2026.07.0` (codename `scarthgap`) — Ubuntu-style CalVer,
+built on Yocto 5.0.19 LTS, pinned by git tag `v2026.07.0` and its
+`PROVENANCE.txt`. The `rolling` line tracks scarthgap point-releases nightly.
 
 **Legend:** ✅ verified on hardware · 🟢 built &amp; wired (on-hardware proof
 pending) · ❌ not possible here (with reason)
@@ -33,9 +37,9 @@ Deep dive: [security-and-auditing.md](security-and-auditing.md).
 
 | Capability | Status | Notes |
 |---|---|---|
-| A/B dual-slot boot (U-Boot) | 🟢 | rootfs A=`p2` / B=`p3`; U-Boot `BOOT_ORDER` + try-counts with auto-rollback |
-| OTA update (`rauc install`) | 🟢 | writes the inactive slot → reboot switches → rollback on failure |
-| Signed + integrity-checked bundles | 🟢 | `verity` (dm-verity) + signed; device keyring = our dev cert, so only our bundles install |
+| A/B dual-slot boot (U-Boot) | ✅ | verified 2026-07-06: U-Boot booted slot A, then B after an update, then rolled back to A (serial trace `A → B → A`) |
+| OTA update (`rauc install`) | ✅ | installed to inactive slot B, reboot switched to B; a marked-bad slot auto-rolled back to A |
+| Signed + integrity-checked bundles | ✅ | `verity` (dm-verity) + signed; device keyring = our dev cert — signature verified on-device at install |
 | Hardware secure boot | ❌ | the Pi 3 boot ROM loads firmware from the FAT partition **unsigned** — a hardware ceiling, not a config gap (needs Pi 4/5 + fused keys / TPM) |
 
 Deep dive + the on-hardware rollback demo: [rauc-ab-updates.md](rauc-ab-updates.md).
@@ -45,8 +49,8 @@ Deep dive + the on-hardware rollback demo: [rauc-ab-updates.md](rauc-ab-updates.
 | Capability | Status | Notes |
 |---|---|---|
 | Dev signing keys (GPG + x509) | ✅ | `scripts/generate-signing-keys.sh`; private halves gitignored |
-| RAUC bundle signing | 🟢 | `RAUC_KEY_FILE`/`RAUC_CERT_FILE`, verified at build |
-| On-device bundle verification | 🟢 | `/etc/rauc/development-1.cert.pem` keyring — proof is the on-hardware `rauc install` |
+| RAUC bundle signing | ✅ | `RAUC_KEY_FILE`/`RAUC_CERT_FILE`; `rauc info` shows the inline signature + version `2026.07.0` |
+| On-device bundle verification | ✅ | `/etc/rauc/development-1.cert.pem` keyring — a real `rauc install` verified the signature before writing slot B |
 
 ---
 
