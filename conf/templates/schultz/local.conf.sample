@@ -90,3 +90,32 @@ IMAGE_INSTALL:append = " rauc rauc-conf"
 # re-analysis -- see docs/yocto-concepts.md). Report per image:
 # tmp/deploy/images/<machine>/<image>.rootfs.cve
 INHERIT += "cve-check"
+
+# --- Optional: attack-surface hardening (opt-in; everything below is OFF) ---
+# The "controlled, config-driven" way to decide what a given image can even do
+# is native Yocto vars -- no custom tooling needed. Uncomment a knob and that
+# capability is gone from THAT signed A/B release (and auditable in its
+# PROVENANCE.txt). Full "four layers" writeup in docs/yocto-concepts.md.
+#
+# 1. Drop debug-tweaks (empty root password + passwordless SSH) -- the single
+#    highest-value change for a locked-down build. It's set in the image
+#    recipe; remove it globally from here:
+#IMAGE_FEATURES:remove = "debug-tweaks"
+#
+# 2. Immutable running rootfs:
+#IMAGE_FEATURES:append = " read-only-rootfs"
+#
+# 3. Compile OUT the Bluetooth + Wi-Fi stacks (no BlueZ / wpa-supplicant built
+#    anywhere). To also power the radios down in firmware, add the disable-bt /
+#    disable-wifi overlays to config.txt.
+#DISTRO_FEATURES:remove = "bluetooth wifi"
+#
+# 4. USB mass storage -- WARNING: on the Pi 3 the Ethernet NIC is itself a USB
+#    device, so never disable USB host wholesale (it kills eth0 -> SSH -> OTA).
+#    Dropping just the mass-storage driver is safe, but needs a kernel .cfg
+#    fragment via a linux-raspberrypi bbappend (not a local.conf one-liner):
+#      recipes-kernel/linux/linux-raspberrypi_%.bbappend:
+#        FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+#        SRC_URI += "file://no-usb-storage.cfg"
+#      files/no-usb-storage.cfg:
+#        # CONFIG_USB_STORAGE is not set
