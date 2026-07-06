@@ -251,7 +251,11 @@ shipping a package version with a known CVE?" and says **nothing** about:
   *a fix is present*, not *it was unexploitable*.
 - **Configuration &amp; hardening.** Weak `sshd` settings, `debug-tweaks` left on
   (this learning image ships it!), open ports, default creds — none of that is a
-  package CVE and none of it shows up here.
+  package CVE and none of it shows up here. Locking these down (drop
+  `debug-tweaks`, remove `bluetooth`/`wifi`, compile out USB mass storage) is a
+  separate, native-Yocto lever — see the attack-surface hardening knobs in
+  [yocto-concepts.md](yocto-concepts.md) and
+  [local.conf.sample](../conf/templates/schultz/local.conf.sample).
 - **Runtime integrity.** Nothing here attests the *built binary* matches the
   source, or that the flashed image wasn't tampered with. That's the job of
   reproducible builds + signing (see the RAUC/signing notes in yocto-concepts).

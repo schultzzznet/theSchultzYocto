@@ -162,6 +162,46 @@ For patching *within* a release rather than jumping releases:
   dm-verity/IMA integrity measurement, signed package feeds. All real,
   all more involved than this learning project needs yet.
 
+### Deciding what the image can even *do* — attack-surface hardening
+
+"Minimal `IMAGE_INSTALL`" above is the easy half. The stronger question is which
+*capabilities* a given image physically has — and Yocto lets you decide that at
+four layers, from "absent from this build" (strongest) to "present but policed":
+
+1. **`DISTRO_FEATURES` / `MACHINE_FEATURES`** — the master switches. Removing a
+   feature makes hundreds of recipes build *without* that support (they key off
+   it via `PACKAGECONFIG`): `DISTRO_FEATURES:remove = "bluetooth wifi"` → no
+   BlueZ, no wpa-supplicant compiled anywhere. Deeper than not-installing a
+   package — the support never enters the build graph.
+2. **Kernel config** — the "can never be used" guarantee. No driver = inert
+   hardware even if the chip is on the board. A `.cfg` fragment via a
+   `linux-raspberrypi` bbappend flips a driver to `n` (gone), `m` (module,
+   blacklistable) or `y`: `# CONFIG_USB_STORAGE is not set` and that image
+   literally cannot mount a USB stick.
+3. **Device tree / `config.txt`** — the Pi-native bus switches, *below* the OS:
+   `dtoverlay=disable-bt`, `dtoverlay=disable-wifi`, `dtparam=i2c_arm=off`,
+   `dtparam=spi=off`, `enable_uart=0`.
+4. **Runtime gating** — `modprobe` blacklist, udev rules, USBGuard allow-lists.
+   Weakest (defense-in-depth); doesn't remove the capability, just polices it.
+
+The **`IMAGE_FEATURES`** knobs sit alongside these: `debug-tweaks` (empty root
+password + passwordless SSH — great for the bench, unacceptable for a locked-down
+build) and `read-only-rootfs`.
+
+Because each release is an immutable, **signed A/B image with a stamped
+`IMAGE_VERSION`**, the capability set becomes *part of the version*: a device on
+a hardened release provably can't do what was compiled out, and an auditor can
+read the kernel `.config` + `config.txt` straight from that release's
+`PROVENANCE.txt`. The concrete, opt-in knobs (all **OFF** by default) are
+documented in [local.conf.sample](../conf/templates/schultz/local.conf.sample)
+under "attack-surface hardening" — the controlled config *is* `local.conf`, no
+custom tooling.
+
+**One Pi 3 B+ gotcha:** its Ethernet NIC is *itself* a USB device (the LAN7515
+is a USB hub + USB-attached NIC), so disabling USB host wholesale also kills
+`eth0` → SSH → OTA. Drop USB **mass storage** only; never USB host. (A Pi 4/5
+separates them.)
+
 ## Fitting into a real toolchain: git, Nexus, Dependency-Track
 
 ### Git — it's already doing more than you think
