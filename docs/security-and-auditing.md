@@ -130,12 +130,18 @@ project name, so nothing is lost: the project reads as the repo, the document
 still names the real firmware. (Override the project name with
 `DTRACK_PROJECT_NAME` if you ever track more than one repo in the same DT.)
 
-**Rolling vs dated projects.** The daily scan targets a single stable project
-version (`raspberrypi3-64-rolling` by default) that it updates *in place*, so
-you get one continuously-monitored "living SBOM" rather than 365 dated projects
-a year. Cut an explicit **dated** project (`raspberrypi3-64-YYYYMMDD`) for
-anything you actually flash and keep — that becomes an immutable point-in-time
-record of "what shipped."
+**Rolling vs released versions.** The daily scan targets one stable version
+(`rolling` by default) that it updates *in place* — a continuously-monitored
+"living SBOM" rather than 365 dated projects a year. Named **releases** use
+Ubuntu-style CalVer `YYYY.MM.PATCH` (e.g. `2026.07.0`), with a codename that
+tracks the Yocto LTS base (`scarthgap`): bump `PATCH` when you re-cut a line with
+fresh LTS backports (`2026.07.0` → `2026.07.1`), bump `YYYY.MM` for a new line.
+Cut one for anything you actually flash and keep — it becomes an immutable
+point-in-time record of "what shipped", pinned by the matching git tag
+`vYYYY.MM.PATCH` and its `PROVENANCE.txt` (exact layer commits + sha256). Note
+**"LTS" is the maintenance promise** — rebuilding a line with backports — **not**
+the version-string format; the board name lives in the DT *project* (add it there
+if you ever target a second machine), so versions stay pure release numbers.
 
 What the daily cadence **catches**: newly-disclosed CVEs (via DT's own re-scan),
 newly-*fixed* CVEs and re-classifications (via the refreshed VEX), and image

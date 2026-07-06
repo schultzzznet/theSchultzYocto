@@ -12,7 +12,9 @@
 # Optional:
 #   DTRACK_PROJECT_NAME     default: theSchultzYocto (the repo/layer -- the DT
 #                           project groups every version of this firmware)
-#   DTRACK_PROJECT_VERSION  default: raspberrypi3-64-<today's date>
+#   DTRACK_PROJECT_VERSION  release: YYYY.MM.PATCH (Ubuntu-style CalVer, e.g.
+#                           2026.07.0); rolling line: "rolling"; unset falls back
+#                           to a build id (build-<UTC timestamp>)
 #
 # Usage: DTRACK_URL=... DTRACK_API_KEY=... ./scripts/upload-sbom.sh
 
@@ -27,7 +29,10 @@ set -euo pipefail
 # separate means DT's project list reads as the repo while the BOM still names
 # the real artifact it describes.
 PROJECT_NAME="${DTRACK_PROJECT_NAME:-theSchultzYocto}"
-PROJECT_VERSION="${DTRACK_PROJECT_VERSION:-raspberrypi3-64-$(date +%Y%m%d)}"
+# Ubuntu-style CalVer for releases (YYYY.MM.PATCH, e.g. 2026.07.0); "rolling" for
+# the daily living SBOM. The fallback is a build id, not a release -- set
+# DTRACK_PROJECT_VERSION explicitly when cutting a real release.
+PROJECT_VERSION="${DTRACK_PROJECT_VERSION:-build-$(date -u +%Y%m%dT%H%M%SZ)}"
 IMAGE_NAME="schultz-image-minimal"
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

@@ -40,9 +40,9 @@ WORK_DIR="$(dirname "$REPO_DIR")"
 cd "$WORK_DIR"
 
 # Monitor a single, stable "living SBOM" project version by default (updated in
-# place each day) instead of spawning a new dated project every night. Explicit
-# dated release snapshots remain a separate upload. Override in keys/dtrack.env.
-export DTRACK_PROJECT_VERSION="${DTRACK_PROJECT_VERSION:-raspberrypi3-64-rolling}"
+# place each day) instead of spawning a new dated project every night. Named
+# releases (YYYY.MM.PATCH) are a separate, explicit upload. Override in keys/dtrack.env.
+export DTRACK_PROJECT_VERSION="${DTRACK_PROJECT_VERSION:-rolling}"
 
 LOG_DIR="$WORK_DIR/build/security-scan-logs"
 mkdir -p "$LOG_DIR"
