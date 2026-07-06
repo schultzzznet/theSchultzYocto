@@ -32,7 +32,13 @@ IMAGE_NAME="schultz-image-minimal"
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(dirname "$REPO_DIR")"
-MANIFEST="$WORK_DIR/build/tmp/deploy/images/raspberrypi3-64/schultz-image-minimal-raspberrypi3-64.rootfs.manifest"
+
+# Which build dir to read the manifest/cve-summary/pkgdata from. "build" is the
+# single-partition rolling image the daily scan tracks; set SCHULTZ_BUILD_SUBDIR
+# to "build-rauc" to snapshot the A/B RAUC image instead (e.g. for a dated
+# release of what actually ships to hardware). See docs/security-and-auditing.md.
+BUILD_SUBDIR="${SCHULTZ_BUILD_SUBDIR:-build}"
+MANIFEST="$WORK_DIR/$BUILD_SUBDIR/tmp/deploy/images/raspberrypi3-64/schultz-image-minimal-raspberrypi3-64.rootfs.manifest"
 
 if [ ! -f "$MANIFEST" ]; then
   echo "No manifest at $MANIFEST -- build schultz-image-minimal first." >&2
@@ -52,8 +58,8 @@ fi
 # packages), so on their own DT can't match CVEs -- but we also feed in
 # cve-check's per-recipe CPE product table below so each component gets a real
 # CPE and DT's NVD matching actually works.
-CVE_SUMMARY="$WORK_DIR/build/tmp/log/cve/cve-summary.json"
-PKGDATA_DIR="$WORK_DIR/build/tmp/pkgdata/raspberrypi3-64/runtime-reverse"
+CVE_SUMMARY="$WORK_DIR/$BUILD_SUBDIR/tmp/log/cve/cve-summary.json"
+PKGDATA_DIR="$WORK_DIR/$BUILD_SUBDIR/tmp/pkgdata/raspberrypi3-64/runtime-reverse"
 
 SBOM_CDX="$(mktemp /tmp/schultz-sbom-XXXXXX.cdx.json)"
 VEX_CDX="$(mktemp /tmp/schultz-vex-XXXXXX.cdx.json)"
