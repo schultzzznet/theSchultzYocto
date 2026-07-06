@@ -6,6 +6,9 @@
 #   1. git pull (ff-only) so recipe changes pushed from the workstation are
 #      picked up -- this is what keeps the VEX's recipe-scoping tracking the
 #      *current* image: add or remove a recipe and the next scan reflects it.
+#   1b. Track the Yocto LTS branch: ff-only pull scarthgap point-releases on
+#      poky/meta-raspberrypi/meta-rauc so the image gets LTS CVE backports
+#      (SCHULTZ_UPDATE_LTS_LAYERS=0 to freeze). meta-rauc-community stays pinned.
 #   2. bitbake schultz-image-minimal -- refreshes the CVE database
 #      (cve-update-db), re-runs cve-check, and regenerates the .manifest +
 #      cve-summary.json + pkgdata that the SBOM and VEX are derived from.
@@ -63,6 +66,29 @@ ls -1t "$LOG_DIR"/scan-*.log 2>/dev/null | tail -n +31 | xargs -r rm -f
 if [ "${SCHULTZ_GIT_PULL:-1}" = "1" ] && [ -d "$REPO_DIR/.git" ]; then
   echo "-- git pull --ff-only --"
   git -C "$REPO_DIR" pull --ff-only || echo "git pull skipped/failed; using current tree"
+fi
+
+# 1b. Track the Yocto LTS branch. scarthgap (5.0) gets CVE backports as point
+#     releases -- without pulling them, cve-check keeps reporting CVEs that LTS
+#     has already fixed upstream, and the image never gets the fix. Pull ff-only
+#     ONLY on layers actually on the scarthgap branch, so the deliberately
+#     pinned meta-rauc-community (detached at b28c04a) is left untouched. A
+#     failed pull is non-fatal: we build whatever is checked out. Set
+#     SCHULTZ_UPDATE_LTS_LAYERS=0 to freeze the layers (e.g. to reproduce a build).
+if [ "${SCHULTZ_UPDATE_LTS_LAYERS:-1}" = "1" ]; then
+  echo "-- tracking Yocto LTS (scarthgap) point-releases --"
+  for _layer in poky meta-raspberrypi meta-rauc; do
+    _d="$WORK_DIR/$_layer"
+    [ -d "$_d/.git" ] || continue
+    if [ "$(git -C "$_d" rev-parse --abbrev-ref HEAD 2>/dev/null)" = "scarthgap" ]; then
+      _before="$(git -C "$_d" rev-parse --short HEAD)"
+      git -C "$_d" pull --ff-only >/dev/null 2>&1 || echo "  $_layer: pull skipped/failed"
+      _after="$(git -C "$_d" rev-parse --short HEAD)"
+      if [ "$_before" != "$_after" ]; then echo "  $_layer: $_before -> $_after (LTS update)"; else echo "  $_layer: $_before (current)"; fi
+    else
+      echo "  $_layer: not on scarthgap (pinned/detached) -- left as-is"
+    fi
+  done
 fi
 
 # Dependency-Track creds (+ optional archive dir), gitignored sibling, same
