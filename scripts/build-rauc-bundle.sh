@@ -98,7 +98,14 @@ if ! bitbake "$BUNDLE"; then
   exit 1
 fi
 
-WIC="$IMAGES_DIR/${IMAGE}-${MACHINE}.rootfs.wic.bz2"
+# The disk image may be gzip- or bzip2-compressed (or raw) depending on
+# IMAGE_FSTYPES; prefer wic.gz because it flashes far faster than wic.bz2.
+WIC="" WIC_EXT=""
+for ext in wic.gz wic.bz2 wic; do
+  if [ -f "$IMAGES_DIR/${IMAGE}-${MACHINE}.rootfs.$ext" ]; then
+    WIC="$IMAGES_DIR/${IMAGE}-${MACHINE}.rootfs.$ext"; WIC_EXT="$ext"; break
+  fi
+done
 BMAP="$IMAGES_DIR/${IMAGE}-${MACHINE}.rootfs.wic.bmap"
 RAUCB="$IMAGES_DIR/${BUNDLE}-${MACHINE}.raucb"
 
@@ -129,14 +136,14 @@ archive_one() {  # archive_one <src> <ext>
   cp -f "$1" "$ARCHIVE_DIR/schultz-rauc-$TS.$2"       # cp dereferences the symlink
   ln -sfn "schultz-rauc-$TS.$2" "$ARCHIVE_DIR/latest.$2"
 }
-archive_one "$WIC"   "wic.bz2"
+if [ -n "$WIC" ]; then archive_one "$WIC" "$WIC_EXT"; else echo "WARN: no .wic image found to archive"; fi
 archive_one "$BMAP"  "wic.bmap"
 archive_one "$RAUCB" "raucb"
-echo "archived $TS -> $ARCHIVE_DIR (latest.wic.bz2 / latest.wic.bmap / latest.raucb)"
+echo "archived $TS -> $ARCHIVE_DIR (latest.${WIC_EXT:-wic.gz} / latest.wic.bmap / latest.raucb)"
 
 # Prune each artifact type to the newest $KEEP (latest.* symlinks are named
 # differently, so this never removes them).
-for ext in wic.bz2 wic.bmap raucb; do
+for ext in wic.gz wic.bz2 wic wic.bmap raucb; do
   ls -1t "$ARCHIVE_DIR"/schultz-rauc-*."$ext" 2>/dev/null | tail -n +"$((KEEP + 1))" | xargs -r rm -f
 done
 

@@ -74,8 +74,8 @@ signature + `compatible` string *before* archiving it under a UTC timestamp in
 grabbing the freshest card never means chasing a timestamp:
 
 ```sh
-scp <build-host>:build-rauc/rauc-archive/latest.wic.bz2 .   # newest A/B image
-scp <build-host>:build-rauc/rauc-archive/latest.raucb   .   # newest signed bundle
+scp <build-host>:build-rauc/rauc-archive/latest.wic.gz .   # newest A/B image
+scp <build-host>:build-rauc/rauc-archive/latest.raucb  .   # newest signed bundle
 ```
 
 Run it standalone any time with `./theSchultzYocto/scripts/build-rauc-bundle.sh`.
@@ -88,11 +88,35 @@ Same as the plain image, but note it's now a **5-partition** card. Both A and B
 are written with the same rootfs at flash time, so either can boot from the
 start.
 
+The build emits a **gzip**-compressed `.wic.gz` (not bzip2 — balenaEtcher
+decompresses gzip *many* times faster than bz2, which is what made flashing feel
+like it hung) alongside a `.wic.bmap`. Fastest option first:
+
 ```sh
-# GUI: balenaEtcher → the .wic.bz2 → your SD card.
-# CLI:
-bzcat schultz-image-minimal-raspberrypi3-64.rootfs.wic.bz2 | sudo dd of=/dev/rdiskN bs=4m
+# FASTEST — bmaptool writes only the used blocks and verifies as it goes; it
+# auto-picks up the sibling .wic.bmap. (macOS: pipx install bmaptool;
+# Debian/Ubuntu: sudo apt install bmap-tools.)
+bmaptool copy schultz-ab-image.wic.gz /dev/rdiskN
+
+# balenaEtcher: just point it at the .wic.gz — gzip unpacks quickly.
+
+# Plain dd, decompressing on the fly (no bmap):
+zcat schultz-ab-image.wic.gz | sudo dd of=/dev/rdiskN bs=4m
+
+# Still holding the older .wic.bz2 and don't want to wait on Etcher? Unpack it
+# once and flash the raw .wic (then Etcher/dd has nothing to decompress):
+#   bunzip2 -k schultz-ab-image.wic.bz2   # -> schultz-ab-image.wic
 ```
+
+> **Why a `.wic` and not an `.iso`?** An `.iso` (ISO 9660) is a read-only
+> *optical-disc* filesystem; PC install ISOs boot through BIOS/UEFI El Torito. A
+> Raspberry Pi doesn't boot that way — its GPU firmware reads a **FAT partition
+> off a partitioned SD card**, so it needs a *raw disk image with a partition
+> table*. That is exactly what a `.wic` is (here: 5 partitions — boot + rootfs
+> A/B + data + home); an `.iso` simply wouldn't boot on a Pi. So the only real
+> choice is the *compression wrapper* around the `.wic`, and we switched it from
+> bzip2 to **gzip** to keep flashing quick. The `.bz2` you flashed earlier was
+> perfectly valid — just slow to decompress.
 
 ## 3. First boot — with the serial console attached
 

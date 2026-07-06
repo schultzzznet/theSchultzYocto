@@ -69,6 +69,13 @@ ENABLE_UART = "1"
 RPI_USE_U_BOOT = "1"
 INIT_MANAGER = "systemd"
 IMAGE_FSTYPES:append = " ext4"
+# Ship a gzip-compressed .wic, not the default bzip2: balenaEtcher and every
+# other flasher decompress gzip many times faster than bz2 (bz2 is what makes
+# flashing feel like it has hung). The .bmap stays so `bmaptool copy` can skip
+# the empty blocks entirely -- the genuinely fastest flash. See
+# docs/rauc-ab-updates.md.
+IMAGE_FSTYPES:remove = "wic.bz2"
+IMAGE_FSTYPES:append = " wic.gz wic.bmap"
 WKS_FILE = "sdimage-dual-raspberrypi.wks.in"
 # Note: this (scarthgap-era) meta-rauc-raspberrypi boots a SHARED kernel from the
 # FAT /boot partition -- only the rootfs is A/B -- so we deliberately do NOT move
