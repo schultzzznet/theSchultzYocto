@@ -76,6 +76,9 @@ theSchultzYocto/                  <- this repo == the "schultz" layer
 │   ├── remote-build.sh           <- runs ON the build host: bootstrap + launch build
 │   ├── upload-sbom.sh            <- push CycloneDX SBOM + VEX to Dependency-Track
 │   ├── daily-security-scan.sh    <- cron: rebuild + refresh SBOM/VEX daily
+│   ├── setup-nexus-mirror.sh     <- create the Nexus raw repos (sstate/source mirror + releases)
+│   ├── cut-release.sh            <- one command: build + verify + SBOM + archive + publish to Nexus + tag
+│   ├── ota-deploy.sh             <- ship a release to a running Pi over the air (streams from Nexus)
 │   └── deploy.sh                 <- sync + remote-build in one command, from the Mac
 └── docs/
     ├── build-host-setup.md
@@ -177,6 +180,15 @@ Two things get mirrored here — both activated in
   so a mirror can't smuggle anything in — it either matches the pin or the
   build fails.
 - **`SSTATE_MIRRORS`** — the compiled task outputs described above.
+
+The same Nexus instance also hosts a third raw repo, **`schultz-releases-raw`**,
+where [scripts/cut-release.sh](scripts/cut-release.sh) publishes each signed RAUC
+release bundle + A/B image. The Pi then updates by **streaming straight from
+Nexus** — `rauc install http://nexus/…` — with no `scp`/`rsync` (Nexus honours
+HTTP range requests, so RAUC pulls the bundle into the spare slot without ever
+landing it on disk). One service is thus both the build cache *and* the OTA
+artifact server: the binary lives in Nexus, the SBOM in Dependency-Track, the
+source in git. Full flow in [docs/rauc-ab-updates.md](docs/rauc-ab-updates.md).
 
 The "from source, pinned, reproducible" guarantee is untouched: `downloads/`
 still holds checksum-verified upstream sources, and you can always delete
