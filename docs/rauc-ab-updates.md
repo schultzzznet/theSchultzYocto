@@ -62,6 +62,26 @@ string is pinned in [schultz-bundle.bb](../recipes-core/images/schultz-bundle.bb
 to match `system.conf` (a mismatch is the #1 reason `rauc install` refuses a
 bundle).
 
+**…or let it build itself.** You don't have to run those `bitbake` lines by
+hand. [build-rauc-bundle.sh](../scripts/build-rauc-bundle.sh) runs the whole
+image → bundle → **verify** → archive cycle, and the nightly
+[daily-security-scan.sh](../scripts/daily-security-scan.sh) chains it as its
+final stage (under the same one-build-at-a-time lock). So every recipe or CVE
+change that refreshes `build/` also refreshes the flashable A/B image **and** the
+signed bundle in `build-rauc/`, automatically. Each run verifies the bundle's
+signature + `compatible` string *before* archiving it under a UTC timestamp in
+`build-rauc/rauc-archive/` and repointing the stable `latest.*` symlinks — so
+grabbing the freshest card never means chasing a timestamp:
+
+```sh
+scp <build-host>:build-rauc/rauc-archive/latest.wic.bz2 .   # newest A/B image
+scp <build-host>:build-rauc/rauc-archive/latest.raucb   .   # newest signed bundle
+```
+
+Run it standalone any time with `./theSchultzYocto/scripts/build-rauc-bundle.sh`.
+Skip it inside a scan with `SCHULTZ_BUILD_RAUC=0`; keep more/fewer archived sets
+with `RAUC_ARCHIVE_KEEP=N` (default 5).
+
 ## 2. Flash it
 
 Same as the plain image, but note it's now a **5-partition** card. Both A and B

@@ -11,11 +11,16 @@
 #      cve-summary.json + pkgdata that the SBOM and VEX are derived from.
 #   3. upload-sbom.sh -- pushes the CPE-enriched SBOM and the freshly-scoped
 #      VEX to Dependency-Track, archiving a timestamped copy of both.
+#   4. build-rauc-bundle.sh -- rebuilds the deployable A/B RAUC image + signed
+#      update bundle from the same tree, in build-rauc/, and archives them
+#      (skippable with SCHULTZ_BUILD_RAUC=0). This keeps the flashable SD image
+#      and the OTA bundle current with every recipe/CVE change too, not just DT.
 #
 # Dependency-Track re-scans NVD on its own daily, but it will NOT refresh the
 # VEX suppressions -- so without this job, a CVE that Yocto has since patched
 # would keep showing as active. This job keeps DT's dismissals honest and its
-# package list current. See docs/security-and-auditing.md.
+# package list current. See docs/security-and-auditing.md and
+# docs/rauc-ab-updates.md.
 #
 # Exit: 0 = ok or cleanly skipped; non-zero = build/upload failure (logged).
 
@@ -91,5 +96,24 @@ fi
 echo "-- upload-sbom.sh (SBOM + VEX, archived to $SBOM_ARCHIVE_DIR) --"
 "$REPO_DIR/scripts/upload-sbom.sh"
 rc=$?
-echo "==== [$(date -Is)] finished (upload rc=$rc) ===="
-exit "$rc"
+
+# 4. Rebuild the deployable A/B RAUC image + signed bundle from the same fresh
+#    tree, in the separate build-rauc/ dir. We already hold the shared heavy-
+#    build lock for this whole run, so tell the child not to re-acquire it (a
+#    second flock on the same file would deadlock) and to log into THIS run's
+#    log. A RAUC failure is surfaced but never masks the security result -- the
+#    SBOM/VEX upload is the primary job here.
+rauc_rc=0
+if [ "${SCHULTZ_BUILD_RAUC:-1}" = "1" ]; then
+  echo "-- build-rauc-bundle.sh (A/B image + signed bundle) --"
+  SCHULTZ_BUILD_LOCK_HELD=1 "$REPO_DIR/scripts/build-rauc-bundle.sh"
+  rauc_rc=$?
+  echo "RAUC image/bundle build rc=$rauc_rc"
+else
+  echo "SCHULTZ_BUILD_RAUC=0 -- skipping RAUC image/bundle build"
+fi
+
+echo "==== [$(date -Is)] finished (upload rc=$rc, rauc rc=$rauc_rc) ===="
+# Surface either failure; the security upload takes priority over the image.
+if [ "$rc" -ne 0 ]; then exit "$rc"; fi
+exit "$rauc_rc"

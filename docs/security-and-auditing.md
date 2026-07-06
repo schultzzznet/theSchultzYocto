@@ -96,6 +96,13 @@ re-classified (disputed, not-applicable) would keep nagging. That gap is what
    `cve-summary.json` and `pkgdata` the SBOM/VEX are built from.
 3. [upload-sbom.sh](../scripts/upload-sbom.sh) — push the CPE-enriched SBOM and
    a freshly-scoped VEX, and archive a timestamped copy of both.
+4. [build-rauc-bundle.sh](../scripts/build-rauc-bundle.sh) — rebuild the
+   deployable A/B image + **signed** update bundle from the same freshly-pulled
+   tree (in the separate `build-rauc/`), verify the bundle's signature +
+   `compatible`, and archive it with `latest.*` symlinks. It runs under the same
+   heavy-build lock, and a failure here is logged but never masks the SBOM/VEX
+   result. Set `SCHULTZ_BUILD_RAUC=0` to skip it on hosts that only need the
+   security refresh.
 
 Install it once on the build host (cron, `03:30` local by default):
 
