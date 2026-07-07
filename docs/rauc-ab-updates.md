@@ -167,6 +167,14 @@ initramfs), and **a rootfs A/B OTA never updates the shared kernel**. Fix:
 `/boot`, the hardened squashfs image needs a **FRESH FLASH** of an SD image built
 with it, *not* a rootfs-only OTA.
 
+**The second catch (`rootfstype`):** even with the SquashFS kernel the first real
+boot still panicked — meta-raspberrypi hard-codes `rootfstype=ext4` into the shared
+`/boot/cmdline.txt`, so U-Boot pointing `root=` at the squashfs slot made the kernel
+try to mount squashfs *as ext4* and fail. Fix:
+[rpi-cmdline.bbappend](../recipes-bsp/bootfiles/rpi-cmdline.bbappend) sets
+`CMDLINE_ROOT_FSTYPE = ""` so the kernel **auto-detects** the root fs (works for the
+ext4 *and* the squashfs slot — both are built into the kernel).
+
 **Auto-rollback (panic=10):** a failed hardened boot is rollback-safe on its own.
 The kernel is built `CONFIG_CMDLINE_FROM_BOOTLOADER=y` (it ignores
 `CONFIG_CMDLINE`, so the [cmdline.cfg](../recipes-kernel/linux/files/cmdline.cfg)
@@ -193,12 +201,21 @@ sync
 
 # 3. Boot the Pi on it → ext4 slot A, loginable (debug-tweaks). Then OTA the
 #    immutable squashfs onto slot B straight from the build host's deploy dir:
-ssh rpi5g16nvme '~/theSchultzYocto/scripts/ota-deploy.sh 2026.07.1-hardened <pi-ip> --local --reboot'
+ssh rpi5g16nvme 'SCHULTZ_BUNDLE_BASENAME=schultz-bundle-hardened \
+  ~/theSchultzYocto/scripts/ota-deploy.sh 2026.07.1-hardened <pi-ip> --local --reboot'
 ```
 
 The kernel on the freshly-flashed `/boot` now mounts SquashFS, so slot B comes up
 on the **immutable** rootfs (loginable via the baked root key), with the ext4 slot
 A as the rollback target and `panic=10` as the safety net.
+
+**Proven end-to-end on the real Pi 3 B+ (2026-07-07):** flashed the base card →
+booted ext4 slot A (`panic=10` live in `/proc/cmdline`) → `ota-deploy.sh
+2026.07.1-hardened … --local --reboot` copied the squashfs to slot B → rebooted and
+came up on **`/dev/mmcblk0p3 on / type squashfs (ro)`**, logged in via the baked key.
+The first attempt also proved `panic=10`: before the `rootfstype` fix slot B
+panicked, and the Pi auto-rebooted and rolled back to slot A on its own — no
+power-cycle.
 
 **Still open:**
 - **Per-device SSH host keys.** `read-only-rootfs` bakes them at build time, so
