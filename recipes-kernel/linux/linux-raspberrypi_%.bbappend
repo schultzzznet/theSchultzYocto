@@ -8,4 +8,7 @@
 # image built with it, not via a rootfs-only OTA. See docs/rauc-ab-updates.md.
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
-SRC_URI += "file://squashfs.cfg"
+# squashfs.cfg -- CONFIG_SQUASHFS=y for the hardened variant (above).
+# cmdline.cfg  -- panic=10 so a failed A/B boot auto-reboots and rolls back
+#                 instead of hanging (no power-cycle needed).
+SRC_URI += "file://squashfs.cfg file://cmdline.cfg"
