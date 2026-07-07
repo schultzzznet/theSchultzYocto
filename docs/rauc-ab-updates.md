@@ -133,18 +133,24 @@ variant-aware via `SCHULTZ_BUNDLE`/`SCHULTZ_IMAGE`):
 
 ```sh
 ssh rpi5g16nvme 'SCHULTZ_BUNDLE=schultz-bundle-hardened SCHULTZ_IMAGE=schultz-image-hardened \
-  ~/theSchultzYocto/scripts/cut-release.sh --no-tag --no-publish'
+  ~/theSchultzYocto/scripts/cut-release.sh'
 ```
 
-`--no-publish`/`--no-tag` build + verify + archive locally with no DT/Nexus/tag
-side effect (drop them for a real hardened release once it's boot-proven).
+That runs the **full** release: build → verify signature/version → **SBOM + VEX to
+Dependency-Track** → archive + `PROVENANCE.txt` → **publish to Nexus** → annotated
+git tag. Add `--no-publish`/`--no-tag` only to dry-run a variant before it's
+boot-proven.
 
-**Verified through the pipeline:** builds a **signed verity bundle with a squashfs
-rootfs slot** (`Version 2026.07.1-hardened`, same compatible), published to Nexus,
-and — with the slots set to `type=raw` (below) — **installs over the air** onto a
-running device (RAUC copies the squashfs into the spare slot). The squashfs slot
-is **35 MB vs the ext4 image's 164 MB**, and it sidesteps the `mkfs.ext4` gap (a
-read-only image is just written to the slot).
+**Released + tracked (2026-07-07):** cut as `theSchultzYocto` **version
+`2026.07.1-hardened`** — a signed verity bundle with a squashfs rootfs slot, its
+**SBOM + VEX in Dependency-Track** (118 components, 56 findings once the VEX
+auto-dismissed the Yocto-fixed CVEs), the bundle + image + SBOM + VEX + PROVENANCE
+**published to Nexus**, and git tag **`v2026.07.1-hardened`**. The squashfs slot is
+**35 MB vs the ext4 image's 164 MB**, and it sidesteps the `mkfs.ext4` gap (a
+read-only image is just written to the slot). It **installs over the air** into a
+`type=raw` slot — including **true HTTP-range streaming straight from Nexus**
+(`ota-deploy.sh 2026.07.1-hardened <ip> --reboot`, no `--local`), verified on the
+real Pi 3 B+ booting `/dev/mmcblk0p2 on / type squashfs (ro)`.
 
 **What's wired now:**
 - **`type=raw` slots** ([system.conf](../recipes-core/rauc/files/system.conf)) —
