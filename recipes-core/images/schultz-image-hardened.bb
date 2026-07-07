@@ -42,3 +42,16 @@ IMAGE_FSTYPES:remove = "ext4 wic wic.gz wic.bz2 wic.bmap tar.bz2"
 # every device from this image would share the same host keys. For per-device
 # keys, persist /etc/ssh onto /data and regenerate on first boot -- see
 # docs/rauc-ab-updates.md.
+
+# With debug-tweaks gone there is no empty root password, so bake an SSH
+# authorized_keys or the device is unreachable after boot. Reads the host-local
+# (gitignored, outside the repo) ../keys/authorized_keys if present, and skips it
+# if absent so a fresh checkout still builds. Key auth for root works via sshd's
+# default PermitRootLogin=prohibit-password (publickey allowed, password denied).
+schultz_inject_authorized_keys() {
+    if [ -f "${TOPDIR}/../keys/authorized_keys" ]; then
+        install -d -m 0700 "${IMAGE_ROOTFS}${ROOT_HOME}/.ssh"
+        install -m 0600 "${TOPDIR}/../keys/authorized_keys" "${IMAGE_ROOTFS}${ROOT_HOME}/.ssh/authorized_keys"
+    fi
+}
+ROOTFS_POSTPROCESS_COMMAND += "schultz_inject_authorized_keys;"

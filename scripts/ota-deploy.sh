@@ -42,7 +42,9 @@ DEVICE_HOST="${TARGET#*@}"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(dirname "$REPO_DIR")"
 REL_ROOT="$WORK_DIR/build-rauc/releases"
-BUNDLE_NAME="schultz-bundle-$VERSION.raucb"
+# Variant-aware bundle filename: SCHULTZ_BUNDLE_BASENAME defaults to the standard
+# bundle; set it to schultz-bundle-hardened for the hardened flavour.
+BUNDLE_NAME="${SCHULTZ_BUNDLE_BASENAME:-schultz-bundle}-$VERSION.raucb"
 
 # ssh opts as an array so word-splitting is explicit (device = root, empty pw).
 SSH=(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10)
