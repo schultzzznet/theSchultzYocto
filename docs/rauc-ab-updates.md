@@ -165,9 +165,40 @@ initramfs), and **a rootfs A/B OTA never updates the shared kernel**. Fix:
 + [squashfs.cfg](../recipes-kernel/linux/files/squashfs.cfg) build
 `CONFIG_SQUASHFS=y` into the kernel — but since that kernel lives on the shared
 `/boot`, the hardened squashfs image needs a **FRESH FLASH** of an SD image built
-with it, *not* a rootfs-only OTA. (A failed hardened boot is rollback-safe: it
-panics before `rauc-mark-good`, so a power-cycle or two exhausts the slot's boot
-attempts and U-Boot falls back to the good ext4 slot.)
+with it, *not* a rootfs-only OTA.
+
+**Auto-rollback (panic=10):** a failed hardened boot is rollback-safe on its own.
+The kernel is built `CONFIG_CMDLINE_FROM_BOOTLOADER=y` (it ignores
+`CONFIG_CMDLINE`, so the [cmdline.cfg](../recipes-kernel/linux/files/cmdline.cfg)
+fragment is inert), so `panic=10` is appended to the U-Boot **bootargs** instead —
+[rpi-u-boot-scr.bbappend](../recipes-bsp/rpi-u-boot-scr/rpi-u-boot-scr.bbappend)
+overrides meta-rauc-raspberrypi's `boot.cmd.in` (our layer priority 10 wins) with
+`setenv bootargs "... rauc.slot=${raucslot} panic=10"`. A boot that panics now
+reboots after 10 s **without a human**; each retry decrements `BOOT_x_LEFT`, and
+once the bad slot's attempts are exhausted U-Boot falls back to the good slot.
+
+### Fresh-flash → go hardened (the working runbook)
+
+The flashable base image (squashfs-capable kernel + `panic=10` boot script +
+`type=raw` slots) is published to Nexus:
+
+```sh
+# 1. Pull the base image (any box that can reach Nexus)
+curl -sfO http://MacStudioM2Max12.local:8081/repository/schultz-releases-raw/theSchultzYocto/base-images/schultz-ab-base-squashfs-kernel.wic.gz
+
+# 2. Flash the SD (macOS: diskutil list to find the card; unmount; rdiskN = raw = faster)
+diskutil unmountDisk /dev/diskN
+gzip -dc schultz-ab-base-squashfs-kernel.wic.gz | sudo dd of=/dev/rdiskN bs=4m
+sync
+
+# 3. Boot the Pi on it → ext4 slot A, loginable (debug-tweaks). Then OTA the
+#    immutable squashfs onto slot B straight from the build host's deploy dir:
+ssh rpi5g16nvme '~/theSchultzYocto/scripts/ota-deploy.sh 2026.07.1-hardened <pi-ip> --local --reboot'
+```
+
+The kernel on the freshly-flashed `/boot` now mounts SquashFS, so slot B comes up
+on the **immutable** rootfs (loginable via the baked root key), with the ext4 slot
+A as the rollback target and `panic=10` as the safety net.
 
 **Still open:**
 - **Per-device SSH host keys.** `read-only-rootfs` bakes them at build time, so
