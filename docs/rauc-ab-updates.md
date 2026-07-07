@@ -139,21 +139,40 @@ ssh rpi5g16nvme 'SCHULTZ_BUNDLE=schultz-bundle-hardened SCHULTZ_IMAGE=schultz-im
 `--no-publish`/`--no-tag` build + verify + archive locally with no DT/Nexus/tag
 side effect (drop them for a real hardened release once it's boot-proven).
 
-**Verified:** builds a **signed verity bundle with a squashfs rootfs slot**,
-`Version 2026.07.1-hardened`, same compatible string. The squashfs slot is
-**35 MB vs the ext4 image's 164 MB** — compressed, and it sidesteps the
-`mkfs.ext4` gap entirely (a read-only image is just written to the slot).
+**Verified through the pipeline:** builds a **signed verity bundle with a squashfs
+rootfs slot** (`Version 2026.07.1-hardened`, same compatible), published to Nexus,
+and — with the slots set to `type=raw` (below) — **installs over the air** onto a
+running device (RAUC copies the squashfs into the spare slot). The squashfs slot
+is **35 MB vs the ext4 image's 164 MB**, and it sidesteps the `mkfs.ext4` gap (a
+read-only image is just written to the slot).
 
-**Boot-time caveats (the last mile, not yet on-hardware):**
-- **Slot type.** A squashfs slot wants `system.conf` slot `type=raw` (RAUC writes
-  it block-for-block and must not run ext4 operations on it). The running
-  system's `system.conf` governs this, so moving a device onto the hardened
-  track is a fresh flash / slot-type change, not a drop-in OTA over the ext4 image.
-- **SSH host keys.** `read-only-rootfs` bakes them at build time, so every device
-  would share them. For per-device keys, persist `/etc/ssh` onto `/data` and
-  regenerate on first boot.
-- **A login credential.** With `debug-tweaks` gone, add an `authorized_keys` (or a
-  hashed root password) or the device is locked (secure, but you can't get in).
+**What's wired now:**
+- **`type=raw` slots** ([system.conf](../recipes-core/rauc/files/system.conf)) —
+  RAUC rejects a squashfs image into an `ext4`-typed slot
+  (`Unsupported image type 'squashfs' for slot type 'ext4'`); `raw` writes the
+  slot block-for-block and accepts *both* the ext4 and squashfs images.
+- **A login credential** — with `debug-tweaks` gone there is no empty root
+  password, so [schultz-image-hardened.bb](../recipes-core/images/schultz-image-hardened.bb)
+  bakes `../keys/authorized_keys` into `/root/.ssh` (root key auth works via
+  sshd's default `PermitRootLogin prohibit-password`).
+
+**The catch (proven the hard way):** OTA'ing the squashfs and rebooting **kernel-
+panics** — `Unable to mount root fs on unknown-block(179,2)`. The A/B layout boots
+a **single shared kernel from FAT `/boot`**, that kernel shipped SquashFS only as a
+module (which can't be loaded before the root fs is mounted, and there's no
+initramfs), and **a rootfs A/B OTA never updates the shared kernel**. Fix:
+[linux-raspberrypi_%.bbappend](../recipes-kernel/linux/linux-raspberrypi_%.bbappend)
++ [squashfs.cfg](../recipes-kernel/linux/files/squashfs.cfg) build
+`CONFIG_SQUASHFS=y` into the kernel — but since that kernel lives on the shared
+`/boot`, the hardened squashfs image needs a **FRESH FLASH** of an SD image built
+with it, *not* a rootfs-only OTA. (A failed hardened boot is rollback-safe: it
+panics before `rauc-mark-good`, so a power-cycle or two exhausts the slot's boot
+attempts and U-Boot falls back to the good ext4 slot.)
+
+**Still open:**
+- **Per-device SSH host keys.** `read-only-rootfs` bakes them at build time, so
+  every device shares them; for per-device keys, persist `/etc/ssh` onto `/data`
+  and regenerate on first boot.
 
 **Stronger still (follow-on):** put the squashfs on **dm-verity** for continuous
 runtime integrity (every block hash-checked against a signed root) — that turns
