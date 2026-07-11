@@ -17,8 +17,12 @@
 #   4. build-rauc-bundle.sh -- rebuilds the deployable A/B RAUC image + signed
 #      update bundle from the same tree, in build-rauc/, and archives them
 #      (skippable with SCHULTZ_BUILD_RAUC=0). This keeps the flashable SD image
-#      and the OTA bundle current with every recipe/CVE change too, not just DT.
-#
+#      and the OTA bundle current with every recipe/CVE change too, not just DT.#   5. pentest-scan.sh + upload-pentest.sh -- runs the pen-test/hardening tools
+#      (nmap/ssh-audit/testssl/lynis/checksec/kernel-hardening-checker) and
+#      pushes them, plus a mirror of DT's triaged findings, into DefectDojo (the
+#      cross-tool aggregation pane). Non-fatal and OPT-IN: only runs when
+#      keys/defectdojo.env (DEFECTDOJO_URL) and PENTEST_TARGET are set, and
+#      never masks the primary SBOM result. Skip entirely with SCHULTZ_PENTEST=0.#
 # Dependency-Track re-scans NVD on its own daily, but it will NOT refresh the
 # VEX suppressions -- so without this job, a CVE that Yocto has since patched
 # would keep showing as active. This job keeps DT's dismissals honest and its
@@ -139,7 +143,27 @@ else
   echo "SCHULTZ_BUILD_RAUC=0 -- skipping RAUC image/bundle build"
 fi
 
-echo "==== [$(date -Is)] finished (upload rc=$rc, rauc rc=$rauc_rc) ===="
-# Surface either failure; the security upload takes priority over the image.
+# 5. Optional pen-test + hardening scan -> DefectDojo (the aggregation pane).
+#    Opt-in and non-fatal, same discipline as the RAUC step: it only runs when
+#    DefectDojo creds (keys/defectdojo.env) and a scan target (PENTEST_TARGET,
+#    usually the device IP) are present, and a failure here is surfaced but
+#    never masks the SBOM/VEX result, which is the primary job of this run.
+pentest_rc=0
+[ -f "$WORK_DIR/keys/defectdojo.env" ] && { set -a; # shellcheck disable=SC1091
+  source "$WORK_DIR/keys/defectdojo.env"; set +a; }
+if [ "${SCHULTZ_PENTEST:-1}" = "1" ] && [ -n "${DEFECTDOJO_URL:-}" ] && [ -n "${PENTEST_TARGET:-}" ]; then
+  echo "-- pentest-scan.sh + upload-pentest.sh (DefectDojo) --"
+  export PENTEST_ARCHIVE_DIR="${PENTEST_ARCHIVE_DIR:-$WORK_DIR/build/pentest-archive}"
+  "$REPO_DIR/scripts/pentest-scan.sh" || echo "pentest-scan reported an error (non-fatal)"
+  "$REPO_DIR/scripts/upload-pentest.sh"
+  pentest_rc=$?
+  echo "pentest upload rc=$pentest_rc"
+elif [ "${SCHULTZ_PENTEST:-1}" = "1" ]; then
+  echo "-- pentest stage skipped: needs keys/defectdojo.env (DEFECTDOJO_URL) + PENTEST_TARGET --"
+fi
+
+echo "==== [$(date -Is)] finished (upload rc=$rc, rauc rc=$rauc_rc, pentest rc=$pentest_rc) ===="
+# Surface any failure; the SBOM/VEX security upload takes priority over the rest.
 if [ "$rc" -ne 0 ]; then exit "$rc"; fi
-exit "$rauc_rc"
+if [ "$rauc_rc" -ne 0 ]; then exit "$rauc_rc"; fi
+exit "$pentest_rc"
