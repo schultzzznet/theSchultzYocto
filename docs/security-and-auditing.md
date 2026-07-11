@@ -251,10 +251,13 @@ shipping a package version with a known CVE?" and says **nothing** about:
   *a fix is present*, not *it was unexploitable*.
 - **Configuration &amp; hardening.** Weak `sshd` settings, `debug-tweaks` left on
   (this learning image ships it!), open ports, default creds — none of that is a
-  package CVE and none of it shows up here. Locking these down (drop
-  `debug-tweaks`, remove `bluetooth`/`wifi`, compile out USB mass storage) is a
-  separate, native-Yocto lever — see the attack-surface hardening knobs in
-  [yocto-concepts.md](yocto-concepts.md) and
+  package CVE, so **none of it shows up in *this* pipeline**. It is covered by a
+  separate, complementary one: the pen-test &amp; hardening scans
+  (nmap / ssh-audit / testssl / Lynis / checksec / kernel-hardening-checker) that
+  feed **DefectDojo** — see [pen-testing.md](pen-testing.md). Locking the
+  underlying issues down (drop `debug-tweaks`, remove `bluetooth`/`wifi`, compile
+  out USB mass storage) remains a native-Yocto lever — see the attack-surface
+  hardening knobs in [yocto-concepts.md](yocto-concepts.md) and
   [local.conf.sample](../conf/templates/schultz/local.conf.sample).
 - **Runtime integrity.** Nothing here attests the *built binary* matches the
   source, or that the flashed image wasn't tampered with. That's the job of
@@ -336,6 +339,8 @@ security control.
 ---
 
 *See also:* [yocto-concepts.md](yocto-concepts.md) for the how-it-works walk-through,
+[pen-testing.md](pen-testing.md) for the complementary pen-test + hardening pipeline that
+feeds DefectDojo (the cross-tool aggregation pane, and a mirror of this pipeline's findings),
 [scripts/manifest-to-cyclonedx.py](../scripts/manifest-to-cyclonedx.py) (SBOM + CPEs),
 [scripts/manifest-to-vex.py](../scripts/manifest-to-vex.py) (VEX),
 [scripts/upload-sbom.sh](../scripts/upload-sbom.sh) (upload + archive),

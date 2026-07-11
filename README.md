@@ -36,6 +36,14 @@ together in Dependency-Track (tracked as a project named after this repo,
 threat models (with their honest limits), and how to trace any single "this CVE
 is fine" decision all the way back to evidence.
 
+The other half of the security story — configuration, network exposure, and
+binary/kernel hardening — plus one place all of it lives:
+[docs/pen-testing.md](docs/pen-testing.md) covers the pen-test + hardening scans
+(nmap, ssh-audit, testssl, Lynis, checksec, kernel-hardening-checker) that feed
+**DefectDojo**, the cross-tool aggregation pane. DefectDojo also mirrors
+Dependency-Track's own triaged findings, so supply chain, exposure, and hardening
+read as a single screen — verified end-to-end against the live Pi.
+
 Ready to put it on real hardware with rollback-safe OTA?
 [docs/rauc-ab-updates.md](docs/rauc-ab-updates.md) walks through building an A/B
 RAUC image (U-Boot + dual rootfs slots), flashing it, and doing a live update
@@ -76,6 +84,9 @@ theSchultzYocto/                  <- this repo == the "schultz" layer
 │   ├── remote-build.sh           <- runs ON the build host: bootstrap + launch build
 │   ├── upload-sbom.sh            <- push CycloneDX SBOM + VEX to Dependency-Track
 │   ├── daily-security-scan.sh    <- cron: rebuild + refresh SBOM/VEX daily
+│   ├── pentest-scan.sh           <- run nmap/ssh-audit/testssl/lynis/checksec/kernel checks
+│   ├── upload-pentest.sh         <- push pen-test findings + a DT mirror to DefectDojo
+│   ├── setup-pentest-tools.sh    <- install the pen-test toolchain on the build host
 │   ├── setup-nexus-mirror.sh     <- create the Nexus raw repos (sstate/source mirror + releases)
 │   ├── cut-release.sh            <- one command: build + verify + SBOM + archive + publish to Nexus + tag
 │   ├── ota-deploy.sh             <- ship a release to a running Pi over the air (streams from Nexus)
@@ -83,6 +94,7 @@ theSchultzYocto/                  <- this repo == the "schultz" layer
 └── docs/
     ├── build-host-setup.md
     ├── security-and-auditing.md
+    ├── pen-testing.md
     ├── rauc-ab-updates.md
     └── first-build.md
 ```

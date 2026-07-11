@@ -1,8 +1,9 @@
 # theSchultzYocto — status at a glance
 
 A living snapshot of what's built, what's **verified on real hardware**, and
-what's deliberately out of reach. Last updated **2026-07-06** (signed A/B OTA
-with automatic rollback, verified end-to-end on a Raspberry Pi 3 B+).
+what's deliberately out of reach. Last updated **2026-07-11** (pen-test +
+hardening scans feeding a DefectDojo aggregation pane, verified end-to-end
+against the live Raspberry Pi 3 B+).
 
 **Latest release:** `2026.07.1` (codename `scarthgap`) — Ubuntu-style CalVer,
 built on Yocto 5.0.19 LTS, pinned by git tag `v2026.07.1` and its
@@ -35,6 +36,19 @@ pending) · ❌ not possible here (with reason)
 | Package-feed signing (GPG) | 🟢 | templated in `local.conf` |
 
 Deep dive: [security-and-auditing.md](security-and-auditing.md).
+
+## Pen-testing &amp; findings aggregation
+
+| Capability | Status | Notes |
+|---|---|---|
+| Pen-test / hardening scan | ✅ | nmap + ssh-audit + checksec + kernel-hardening-checker, run 2026-07-11 against the live Pi (`192.168.1.226`) |
+| DefectDojo aggregation pane | ✅ | Product `theSchultzYocto`: **385 active findings** (6 Crit / 50 High / 204 Med / 124 Low / 1 Info) across all tools, one screen |
+| Dependency-Track SCA mirror | ✅ | DT's triaged findings exported (FPF, 231 KB) into DefectDojo — SCA + pen-test correlated in one pane |
+| Native parsers used where they exist | ✅ | nmap / ssh-audit / testssl / DT-FPF native; a small generic normaliser only for lynis / checksec / kernel-hardening-checker |
+| testssl / Lynis | ⏭️ | skip **by design** on this image (no TLS port; busybox has no `bash`) — logged, never faked |
+| Daily automated pen-test → DefectDojo | 🟢 | opt-in, non-fatal stage in the daily scan (`keys/defectdojo.env` + `PENTEST_TARGET`); never masks the SBOM result |
+
+Deep dive: [pen-testing.md](pen-testing.md).
 
 ## Updates &amp; boot
 
