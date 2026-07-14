@@ -2,8 +2,9 @@
 
 A living snapshot of what's built, what's **verified on real hardware**, and
 what's deliberately out of reach. Last updated **2026-07-11** (pen-test +
-hardening scans feeding a DefectDojo aggregation pane, verified end-to-end
-against the live Raspberry Pi 3 B+).
+hardening scans feeding a DefectDojo aggregation pane, and a Tesla-style fleet
+dashboard + device agent — both verified end-to-end, the former against the live
+Raspberry Pi 3 B+).
 
 **Latest release:** `2026.07.1` (codename `scarthgap`) — Ubuntu-style CalVer,
 built on Yocto 5.0.19 LTS, pinned by git tag `v2026.07.1` and its
@@ -49,6 +50,18 @@ Deep dive: [security-and-auditing.md](security-and-auditing.md).
 | Daily automated pen-test → DefectDojo | 🟢 | opt-in, non-fatal stage in the daily scan (`keys/defectdojo.env` + `PENTEST_TARGET`); never masks the SBOM result |
 
 Deep dive: [pen-testing.md](pen-testing.md).
+
+## Fleet management (Tesla-style)
+
+| Capability | Status | Notes |
+|---|---|---|
+| Fleet dashboard app | 🟢 | Spring Boot app in `the-docker-swarm-ai/apps/fleet-app` (templated on `talk-app`); built + container smoke-tested — heartbeat ingest, Nexus release listing, update flow, dashboard render — with simulated devices |
+| Device agent (`schultz-agent`) | 🟢 | stdlib-only heartbeat recipe here; the real agent→fleet contract verified off-device (fields map 1:1, graceful degradation) |
+| Release awareness (Nexus) | ✅ | live: current vs latest-available computed from `schultz-releases-raw` (`2026.07.1` discovered) |
+| OTA from the dashboard | 🟢 | visualize-first: **Install update** returns the `ota-deploy.sh` command (the proven RAUC/Nexus streaming path), not a new self-install |
+| On a real Pi + in the cluster | 🟢 | pending: rebuild an image with `IMAGE_INSTALL:append = " schultz-agent"` + `make deploy-fleet-k3s` |
+
+Deep dive: [fleet-app.md](fleet-app.md).
 
 ## Updates &amp; boot
 

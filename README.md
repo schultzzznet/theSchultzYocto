@@ -44,6 +44,12 @@ binary/kernel hardening — plus one place all of it lives:
 Dependency-Track's own triaged findings, so supply chain, exposure, and hardening
 read as a single screen — verified end-to-end against the live Pi.
 
+Want to *see* the fleet — Tesla-style? [docs/fleet-app.md](docs/fleet-app.md)
+covers the companion **fleet dashboard** (a cluster app in `the-docker-swarm-ai`)
+and the on-device `schultz-agent` that reports version, A/B slot, temperature and
+undervoltage, and surfaces "update available" with a one-click OTA — reusing the
+proven `ota-deploy.sh`/Nexus/RAUC path. One screen for the whole fleet.
+
 Ready to put it on real hardware with rollback-safe OTA?
 [docs/rauc-ab-updates.md](docs/rauc-ab-updates.md) walks through building an A/B
 RAUC image (U-Boot + dual rootfs slots), flashing it, and doing a live update
@@ -78,6 +84,8 @@ theSchultzYocto/                  <- this repo == the "schultz" layer
 │   └── templates/schultz/        <- TEMPLATECONF bootstrap files
 ├── recipes-core/images/
 │   └── schultz-image-minimal.bb  <- our custom image recipe
+├── recipes-support/
+│   └── schultz-agent/            <- opt-in device agent for the fleet dashboard
 ├── scripts/
 │   ├── fetch-layers.sh           <- clones poky + meta-raspberrypi as siblings
 │   ├── sync-to-host.sh           <- git-based sync to the build host (no scp/rsync)
@@ -95,6 +103,7 @@ theSchultzYocto/                  <- this repo == the "schultz" layer
     ├── build-host-setup.md
     ├── security-and-auditing.md
     ├── pen-testing.md
+    ├── fleet-app.md
     ├── rauc-ab-updates.md
     └── first-build.md
 ```

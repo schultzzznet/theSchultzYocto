@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""theSchultzYocto fleet agent -- POST device status to the fleet-app dashboard.
+
+Stdlib only. Every probe degrades gracefully: a missing rauc, vcgencmd or
+persistent-data mount yields a null field, never a crash or a skipped heartbeat.
+Config is /etc/schultz-agent.conf (KEY=VALUE lines), overridable by environment.
+"""
+import json
+import os
+import re
+import signal
+import socket
+import subprocess
+import sys
+import time
+import urllib.request
+
+AGENT_VERSION = "1.0"
+CONF = os.environ.get("SCHULTZ_AGENT_CONF", "/etc/schultz-agent.conf")
+
+
+def load_conf(path):
+    cfg = {}
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                cfg[k.strip()] = v.strip()
+    except OSError:
+        pass
+    for k in ("FLEET_URL", "FLEET_TOKEN", "INTERVAL", "DEVICE_NAME", "MACHINE", "DISK_PATH"):
+        if os.environ.get(k):
+            cfg[k] = os.environ[k]
+    return cfg
+
+
+def read_file(path):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def os_release():
+    data = {}
+    for line in (read_file("/etc/os-release") or "").splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            data[k] = v.strip().strip('"')
+    return data
+
+
+def device_id():
+    return read_file("/etc/machine-id") or socket.gethostname()
+
+
+def primary_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("192.168.1.1", 9))  # UDP connect sends nothing; just picks the route
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except OSError:
+        return None
+
+
+def uptime_seconds():
+    v = read_file("/proc/uptime")
+    try:
+        return int(float(v.split()[0])) if v else None
+    except (ValueError, IndexError):
+        return None
+
+
+def soc_temp():
+    v = read_file("/sys/class/thermal/thermal_zone0/temp")
+    try:
+        return round(int(v) / 1000.0, 1) if v else None
+    except ValueError:
+        return None
+
+
+def undervoltage():
+    try:
+        out = subprocess.run(
+            ["vcgencmd", "get_throttled"], capture_output=True, text=True, timeout=5
+        )
+        m = re.search(r"0x([0-9a-fA-F]+)", out.stdout)
+        if not m:
+            return None
+        bits = int(m.group(1), 16)
+        # bit 0 = under-voltage now; bit 16 = under-voltage has occurred since boot
+        return bool(bits & 0x1) or bool(bits & 0x10000)
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return None
+
+
+def rootfs_variant():
+    # A squashfs / read-only root is the hardened image.
+    for line in (read_file("/proc/mounts") or "").splitlines():
+        parts = line.split()
+        if len(parts) >= 4 and parts[1] == "/":
+            if parts[2] == "squashfs" or "ro" in parts[3].split(","):
+                return "hardened"
+            return ""
+    return None
+
+
+def rauc_status():
+    """Return (bootSlot, raucBooted) parsed from `rauc status`, or (None, None)."""
+    try:
+        out = subprocess.run(
+            ["rauc", "status"], capture_output=True, text=True, timeout=8
+        ).stdout
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return None, None
+    m = re.search(r"[Bb]ooted from.*?(rootfs\.\d+\s*\(([AB])\))", out)
+    if m:
+        return m.group(2), m.group(1).strip()
+    m = re.search(r"[Bb]ooted.*?\(([AB])\)", out)
+    if m:
+        return m.group(1), None
+    return None, None
+
+
+def disk_pct(path):
+    try:
+        st = os.statvfs(path)
+        total = st.f_blocks * st.f_frsize
+        free = st.f_bfree * st.f_frsize
+        return int(round((total - free) * 100.0 / total)) if total > 0 else None
+    except OSError:
+        return None
+
+
+def mem_pct():
+    info = {}
+    for line in (read_file("/proc/meminfo") or "").splitlines():
+        m = re.match(r"(\w+):\s+(\d+)", line)
+        if m:
+            info[m.group(1)] = int(m.group(2))
+    total, avail = info.get("MemTotal"), info.get("MemAvailable")
+    if total and avail is not None and total > 0:
+        return int(round((total - avail) * 100.0 / total))
+    return None
+
+
+def collect(cfg, osr):
+    slot, booted = rauc_status()
+    disk_path = cfg.get("DISK_PATH") or "/data"
+    if not os.path.isdir(disk_path):
+        disk_path = "/"
+    return {
+        "deviceId": device_id(),
+        "name": cfg.get("DEVICE_NAME") or socket.gethostname(),
+        "machine": cfg.get("MACHINE") or None,
+        "imageId": osr.get("IMAGE_ID"),
+        "currentVersion": osr.get("IMAGE_VERSION"),
+        "variant": rootfs_variant(),
+        "bootSlot": slot,
+        "raucBooted": booted,
+        "ip": primary_ip(),
+        "uptimeSeconds": uptime_seconds(),
+        "socTempC": soc_temp(),
+        "undervoltage": undervoltage(),
+        "diskUsePct": disk_pct(disk_path),
+        "memUsePct": mem_pct(),
+        "agentVersion": AGENT_VERSION,
+    }
+
+
+def post(url, token, payload):
+    body = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        url.rstrip("/") + "/api/agent/heartbeat", data=body, method="POST"
+    )
+    req.add_header("Content-Type", "application/json")
+    if token:
+        req.add_header("X-Fleet-Token", token)
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read().decode())
+
+
+_run = True
+
+
+def _stop(*_):
+    global _run
+    _run = False
+
+
+def main():
+    signal.signal(signal.SIGTERM, _stop)
+    signal.signal(signal.SIGINT, _stop)
+    cfg = load_conf(CONF)
+    url = cfg.get("FLEET_URL")
+    token = cfg.get("FLEET_TOKEN")
+    interval = int(cfg.get("INTERVAL") or 30)
+    if not url:
+        print(f"schultz-agent: FLEET_URL not set in {CONF}", file=sys.stderr)
+        return 1
+    print(f"schultz-agent {AGENT_VERSION}: reporting to {url} every {interval}s", file=sys.stderr)
+    while _run:
+        try:
+            resp = post(url, token, collect(cfg, os_release()))
+            tgt = resp.get("assignedTarget")
+            if tgt:
+                print(
+                    f"schultz-agent: an update is queued for us -> {tgt} "
+                    "(applied out-of-band via ota-deploy.sh)",
+                    file=sys.stderr,
+                )
+        except Exception as e:  # never die on a transient network error
+            print(f"schultz-agent: heartbeat failed: {e}", file=sys.stderr)
+        for _ in range(interval):
+            if not _run:
+                break
+            time.sleep(1)
+    print("schultz-agent: stopped", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

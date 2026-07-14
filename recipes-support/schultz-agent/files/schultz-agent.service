@@ -1,0 +1,20 @@
+[Unit]
+Description=theSchultzYocto fleet agent (device heartbeat to fleet-app)
+Documentation=https://github.com/schultzzznet/theSchultzYocto
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/schultz-agent
+Restart=always
+RestartSec=15
+# Hardening: the agent only reads /proc, /sys and /etc and makes an outbound
+# HTTP call -- it needs no privileges or write access.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
