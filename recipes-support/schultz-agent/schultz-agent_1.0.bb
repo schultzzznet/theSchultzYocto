@@ -13,10 +13,11 @@ SRC_URI = "file://schultz-agent \
 
 S = "${WORKDIR}"
 
-# Full python3 keeps the reference recipe bulletproof (urllib/json/subprocess all
-# present). Size-conscious builds can pin the granular set instead:
-#   RDEPENDS:${PN} = "python3-core python3-json python3-netclient python3-shell"
-RDEPENDS:${PN} = "python3"
+# The agent uses only stdlib (urllib/json/socket/subprocess). Pin the granular
+# python3 packages -- full python3 pushes the ext4 rootfs over the 213 MB A/B
+# slot (measured: 224 MB full vs 192 MB granular). netclient pulls in http.client
+# + email; io provides socket. Proven on real hardware 2026-07-14.
+RDEPENDS:${PN} = "python3-core python3-netclient python3-json python3-io"
 
 inherit systemd
 

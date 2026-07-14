@@ -1,10 +1,9 @@
 # theSchultzYocto — status at a glance
 
 A living snapshot of what's built, what's **verified on real hardware**, and
-what's deliberately out of reach. Last updated **2026-07-11** (pen-test +
-hardening scans feeding a DefectDojo aggregation pane, and a Tesla-style fleet
-dashboard + device agent — both verified end-to-end, the former against the live
-Raspberry Pi 3 B+).
+what's deliberately out of reach. Last updated **2026-07-14** (a Tesla-style
+fleet dashboard deployed to the k3s cluster + an on-device agent, verified live:
+the real Raspberry Pi 3 B+ reports into the dashboard over the air).
 
 **Latest release:** `2026.07.1` (codename `scarthgap`) — Ubuntu-style CalVer,
 built on Yocto 5.0.19 LTS, pinned by git tag `v2026.07.1` and its
@@ -51,15 +50,19 @@ Deep dive: [security-and-auditing.md](security-and-auditing.md).
 
 Deep dive: [pen-testing.md](pen-testing.md).
 
-## Fleet management (Tesla-style)
+## Fleet management (Tesla-style) — LIVE
+
+Verified end-to-end on real hardware **2026-07-14**: the agent-enabled image was
+OTA'd to the Pi 3 B+ (slot B) and its card shows live in the cluster-hosted
+dashboard at `http://delli7c6g32.local/fleet`.
 
 | Capability | Status | Notes |
 |---|---|---|
-| Fleet dashboard app | 🟢 | Spring Boot app in `the-docker-swarm-ai/apps/fleet-app` (templated on `talk-app`); built + container smoke-tested — heartbeat ingest, Nexus release listing, update flow, dashboard render — with simulated devices |
-| Device agent (`schultz-agent`) | 🟢 | stdlib-only heartbeat recipe here; the real agent→fleet contract verified off-device (fields map 1:1, graceful degradation) |
-| Release awareness (Nexus) | ✅ | live: current vs latest-available computed from `schultz-releases-raw` (`2026.07.1` discovered) |
-| OTA from the dashboard | 🟢 | visualize-first: **Install update** returns the `ota-deploy.sh` command (the proven RAUC/Nexus streaming path), not a new self-install |
-| On a real Pi + in the cluster | 🟢 | pending: rebuild an image with `IMAGE_INSTALL:append = " schultz-agent"` + `make deploy-fleet-k3s` |
+| Fleet dashboard app | ✅ | Spring Boot app (`the-docker-swarm-ai/apps/fleet-app`, templated on `talk-app`) **deployed to k3s** — cosign-signed image, 2/2 pods, CNPG `fleet-db`, Traefik `/fleet` ingress |
+| Device agent (`schultz-agent`) | ✅ | running on the real Pi 3 B+ under systemd, heartbeating real telemetry (version, boot slot B, 57.5 °C, uptime, mem, IP) every 30 s |
+| Release awareness (Nexus) | ✅ | live: current vs latest-available from `schultz-releases-raw`; the Pi's card reads "up to date" on `2026.07.1` |
+| OTA from the dashboard | 🟢 | visualize-first: **Install update** returns the `ota-deploy.sh` command (the proven RAUC/Nexus streaming path), not a device self-install |
+| A/B slot fit | ✅ | full python3 overflowed the 213 MB slot (224 MB) → pinned granular `python3-core/netclient/json/io` → 192 MB |
 
 Deep dive: [fleet-app.md](fleet-app.md).
 

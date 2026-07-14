@@ -110,12 +110,12 @@ Turning the button into a real trigger later is a single method in the app's
 
 | Piece | Status | Notes |
 |---|---|---|
-| `schultz-agent` recipe + service | 🟢 | builds as a recipe; agent→fleet contract verified off-device |
-| fleet-app (backend + dashboard) | ✅ | built + smoke-tested in a container: heartbeat ingest, release listing from Nexus, update flow, dashboard render |
+| `schultz-agent` recipe + service | ✅ | running on the real Pi 3 B+ under systemd, heartbeating every 30 s |
+| fleet-app (backend + dashboard) | ✅ | deployed to k3s (cosign-signed, 2/2 pods, CNPG `fleet-db`, `/fleet` ingress) |
 | Nexus release listing | ✅ | live: `2026.07.1` / `2026.07.1-hardened` discovered; `latest` = mainline |
-| On real hardware | ⬜ | needs an image rebuilt with `schultz-agent` + the app deployed to k3s |
+| End-to-end on real hardware | ✅ | 2026-07-14: agent image OTA'd to slot B; the Pi's card shows live in the dashboard |
 
-Deploy the app + database with `make deploy-fleet-k3s` (see the
+The app + database deploy with `make deploy-fleet-k3s` (see the
 [app README](https://github.com/schultzzznet/the-docker-swarm-ai/tree/main/apps/fleet-app));
 build a fleet-enabled image with the `IMAGE_INSTALL:append` above and flash/OTA
 it to light the first card up for real.
