@@ -151,6 +151,23 @@ so you can log in as `root` with no password, either:
 - over SSH once it's on the network: `ssh root@<ip>` — check your router's
   DHCP leases, or log in over serial first to find the IP.
 
+> **From your workstation you often can't reach the device directly** — it lives
+> on the build host's LAN segment, and the hardened image only trusts the SSH key
+> baked in on the build host, not your laptop. Hop through the build host
+> (`rpi5g16nvme`), which is always on, shares the device's network, and already
+> trusts it:
+>
+> ```sh
+> ssh -t rpi5g16nvme \
+>   'ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@192.168.1.226'
+> ```
+>
+> `-t` forces a PTY so the inner interactive login works; the
+> `StrictHostKeyChecking=no` + `UserKnownHostsFile=/dev/null` pair skips host-key
+> prompts for a device that reflashes and regenerates its keys (fine here — it's a
+> trusted LAN, not the public internet). Swap `192.168.1.226` for the device's
+> current DHCP IP.
+
 ## Where to go from here
 
 - Add/remove packages in `recipes-core/images/schultz-image-minimal.bb` via
