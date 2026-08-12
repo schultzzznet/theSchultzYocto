@@ -74,6 +74,14 @@ INHERIT += "own-mirrors"
 # (a tarball per git recipe alongside the clone) and a little time per fetch.
 BB_GENERATE_MIRROR_TARBALLS = "1"
 
+# Shared hash-equivalence server, stood up by scripts/setup-hashserv.sh. This
+# is what makes SSTATE_MIRRORS above actually hit: sstate objects are named by
+# the *unihash*, and bitbake's default local unix-socket server keeps those
+# mappings inside this build dir, so a mirror populated by another builder (or
+# by this one before a wipe) resolves to different names and misses every time.
+# sanity.bbclass warns about precisely this combination.
+BB_HASHSERVE = "localhost:8686"
+
 # --- Optional: sign the IPK package feed ---
 # Run scripts/generate-signing-keys.sh first (creates the "schultz-dev" GPG
 # key). This signs the feed/repository index, not individual .ipk files --
