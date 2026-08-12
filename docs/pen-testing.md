@@ -151,7 +151,7 @@ Create a gitignored `keys/defectdojo.env` sibling (same convention as
 `keys/dtrack.env`):
 
 ```sh
-DEFECTDOJO_URL=http://delli7c6g32.local:30602
+DEFECTDOJO_URL=http://delli7c6g32.local:32438
 DEFECTDOJO_TOKEN=<API v2 token: DefectDojo UI → User menu → API v2 Key>
 PENTEST_TARGET=192.168.1.226            # the device to scan
 ```
