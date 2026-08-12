@@ -67,6 +67,13 @@ SSTATE_MIRRORS ?= "file://.* http://MacStudioM2Max12.local:8081/repository/yocto
 SOURCE_MIRROR_URL ?= "http://MacStudioM2Max12.local:8081/repository/yocto-sources-raw/"
 INHERIT += "own-mirrors"
 
+# Without this, git:// SRC_URIs stay as bare clones in DL_DIR and are never
+# packed into a single mirrorable file -- so the source mirror above would
+# silently cover only the plain-tarball recipes, which is exactly the wrong
+# half to be missing when an upstream deletes a tag. Costs extra DL_DIR space
+# (a tarball per git recipe alongside the clone) and a little time per fetch.
+BB_GENERATE_MIRROR_TARBALLS = "1"
+
 # --- Optional: sign the IPK package feed ---
 # Run scripts/generate-signing-keys.sh first (creates the "schultz-dev" GPG
 # key). This signs the feed/repository index, not individual .ipk files --
