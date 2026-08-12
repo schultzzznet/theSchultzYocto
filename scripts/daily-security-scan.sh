@@ -9,6 +9,10 @@
 #   1b. Track the Yocto LTS branch: ff-only pull scarthgap point-releases on
 #      poky/meta-raspberrypi/meta-rauc so the image gets LTS CVE backports
 #      (SCHULTZ_UPDATE_LTS_LAYERS=0 to freeze). meta-rauc-community stays pinned.
+#   1c. Preflight every endpoint before building. A stale URL costs seconds to
+#      detect here and ~20 wasted minutes to detect at the upload stage.
+#      Dependency-Track unreachable aborts; DefectDojo or Nexus unreachable just
+#      disables that stage.
 #   2. bitbake schultz-image-minimal -- refreshes the CVE database
 #      (cve-update-db), re-runs cve-check, and regenerates the .manifest +
 #      cve-summary.json + pkgdata that the SBOM and VEX are derived from.
@@ -114,6 +118,54 @@ if [ -z "${DTRACK_URL:-}" ]; then
 fi
 export SBOM_ARCHIVE_DIR="${SBOM_ARCHIVE_DIR:-$WORK_DIR/build/sbom-archive}"
 
+# The other two services' creds, loaded here rather than at their stages so the
+# preflight below can actually test them.
+for _envf in defectdojo nexus; do
+  [ -f "$WORK_DIR/keys/$_envf.env" ] && { set -a; # shellcheck disable=SC1091
+    source "$WORK_DIR/keys/$_envf.env"; set +a; }
+done
+
+# 1c. Preflight. A stale endpoint used to surface as connection-refused twenty
+#     minutes into the build -- DefectDojo's k3s NodePort silently moved
+#     30602 -> 32438 and nothing noticed until the upload stage, by which point
+#     the pen-test scan had also run for nothing. Probing costs seconds and
+#     decides up front which optional stages are worth running at all.
+#     Note a refused connection here usually means a stale port, NOT an outage.
+http_code() {
+  local url="$1"; shift
+  curl -sS -o /dev/null -m 8 --retry 2 --retry-delay 2 -w '%{http_code}' "$@" "$url" 2>/dev/null || echo 000
+}
+
+echo "-- preflight: endpoint reachability --"
+_dt="$(http_code "${DTRACK_URL%/}/api/version")"
+echo "   dependency-track  ${DTRACK_URL} -> $_dt"
+if [ "$_dt" != "200" ]; then
+  echo "   ABORT: Dependency-Track unreachable -- refusing to spend a build we cannot publish."
+  exit 1
+fi
+
+if [ "${SCHULTZ_PENTEST:-1}" = "1" ] && [ -n "${DEFECTDOJO_URL:-}" ] && [ -n "${PENTEST_TARGET:-}" ]; then
+  _dd="$(http_code "${DEFECTDOJO_URL%/}/api/v2/user_profile/" -H "Authorization: Token ${DEFECTDOJO_TOKEN:-}")"
+  echo "   defectdojo        ${DEFECTDOJO_URL} -> $_dd"
+  if [ "$_dd" != "200" ]; then
+    case "$_dd" in
+      000)     echo "   -> unreachable (stale NodePort?); skipping the pen-test stage" ;;
+      401|403) echo "   -> auth rejected (stale API token?); skipping the pen-test stage" ;;
+      *)       echo "   -> unexpected status; skipping the pen-test stage" ;;
+    esac
+    SCHULTZ_PENTEST=0
+  fi
+fi
+
+if [ "${SCHULTZ_MIRROR_PUSH:-1}" = "1" ] && [ -n "${NEXUS_URL:-}" ]; then
+  _nx="$(http_code "${NEXUS_URL%/}/service/rest/v1/status")"
+  echo "   nexus             ${NEXUS_URL} -> $_nx"
+  if [ "$_nx" != "200" ]; then
+    echo "   -> unreachable; skipping the mirror push (builds are unaffected, fetches just go upstream)"
+    SCHULTZ_MIRROR_PUSH=0
+  fi
+fi
+
 # 2. Refresh cve-check + regenerate the SBOM/VEX inputs. oe-init-build-env is
 #    not set -u safe, so relax strict mode just for sourcing it.
 set +u
@@ -154,8 +206,6 @@ fi
 #    usually the device IP) are present, and a failure here is surfaced but
 #    never masks the SBOM/VEX result, which is the primary job of this run.
 pentest_rc=0
-[ -f "$WORK_DIR/keys/defectdojo.env" ] && { set -a; # shellcheck disable=SC1091
-  source "$WORK_DIR/keys/defectdojo.env"; set +a; }
 if [ "${SCHULTZ_PENTEST:-1}" = "1" ] && [ -n "${DEFECTDOJO_URL:-}" ] && [ -n "${PENTEST_TARGET:-}" ]; then
   echo "-- pentest-scan.sh + upload-pentest.sh (DefectDojo) --"
   export PENTEST_ARCHIVE_DIR="${PENTEST_ARCHIVE_DIR:-$WORK_DIR/build/pentest-archive}"
