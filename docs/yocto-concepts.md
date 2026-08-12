@@ -284,12 +284,41 @@ are checksum-verified against `SRC_URI[sha256sum]` on every fetch, so a hostile
 mirror can only break a build, never alter one. sstate entries are executable
 build output that gets unpacked into later builds and are *not* independently
 verified — so write access to `yocto-sstate-raw` is effectively commit access to
-your images. Reads are anonymous by design; writes use the credentials in
-`keys/nexus.env`, and that account should not be a shared admin login.
+your images. Reads are anonymous by design; writes use a **scoped `yocto-ci`
+account** created by `setup-nexus-mirror.sh` — `BROWSE/READ/EDIT/ADD` on exactly
+the three raw repos, no `DELETE`, no admin. Verified: `201` writing to its own
+repo, `403` writing to any other repo, `403` on the admin API. It is deliberately
+not the shared instance admin login that the rest of the home-lab tooling uses.
 
-One known rough edge: BitBake's `BB_HASHSERVE` (on by default) isn't fully
-compatible with `SSTATE_MIRRORS` — logs a warning, doesn't block builds, low
-priority to fix while the mirror is still lightly populated.
+### The hash-equivalence server (why the mirror would otherwise never hit)
+
+A populated sstate mirror is still useless if the consumer looks for the wrong
+filenames, and by default it does. `sanity.bbclass` says so out loud:
+
+> You are using a local hash equivalence server but have configured an sstate
+> mirror. This will likely mean no sstate will match from the mirror.
+
+Hash equivalence maps a task's **taskhash** (what its inputs hash to) onto a
+**unihash** (what its output is *named*), so that two different inputs known to
+produce identical output can share one cached result. sstate objects on the
+mirror are named with the producer's unihashes. BitBake's default server is
+local, on a unix socket, with its database inside `build/cache/` — those
+mappings never leave the machine, so any other consumer computes different names
+and misses every object.
+
+[scripts/setup-hashserv.sh](../scripts/setup-hashserv.sh) fixes it properly:
+`bitbake-hashserv` as a systemd unit on the build host, database moved out to
+`~/hashserv/` (so it survives a `build/` wipe), seeded from the existing local
+database via `sqlite3 .backup` so the equivalences for the already-uploaded
+sstate are not stranded. `local.conf` then sets `BB_HASHSERVE = "localhost:8686"`
+(a second builder points at `rpi5g16nvme:8686`). `BB_HASHSERVE` is in
+`BB_BASEHASH_IGNORE_VARS`, so switching servers changes no task signature and
+triggers no rebuild. Anonymous permissions are narrowed to `@read,@report`,
+dropping the default `@db-admin`.
+
+The trade-off worth knowing: the nightly build now depends on that service being
+up. `Restart=always` covers crashes; a failure to start would fail the build
+rather than silently degrade it, which is the right way round.
 
 Beyond mirrors, Nexus's format-aware repo types (Debian, RPM, apt) can host
 an actual package feed if you ever want field updates via `opkg`/`apt`

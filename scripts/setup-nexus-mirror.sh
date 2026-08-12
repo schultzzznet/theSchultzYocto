@@ -81,6 +81,71 @@ else
     && echo "    created."
 fi
 
+# ── yocto-ci: a write account that is NOT admin ──────────────────────────────
+# Writing to yocto-sstate-raw is effectively commit access to every future
+# image: sstate is executable build output that gets unpacked into builds, and
+# unlike source tarballs it is not checksum-pinned by the recipe. So the build
+# host gets an account scoped to these three repos, with no delete and no
+# admin, rather than the shared instance admin login.
+CI_USER="${NEXUS_CI_USER:-yocto-ci}"
+CI_ROLE="yocto-ci-writer"
+REPOS=(yocto-sources-raw yocto-sstate-raw schultz-releases-raw)
+
+echo ""
+echo "==> Ensuring scoped write account '$CI_USER'..."
+
+PRIVS=()
+for repo in "${REPOS[@]}"; do
+  priv="nx-yocto-write-$repo"
+  PRIVS+=("$priv")
+  if curl -sf "${AUTH[@]}" -o /dev/null "$NEXUS_URL/service/rest/v1/security/privileges/$priv"; then
+    echo "    privilege $priv exists."
+  else
+    # No DELETE: a mirror push never needs to remove anything, and releases are
+    # immutable (ALLOW_ONCE) anyway.
+    curl -sf "${AUTH[@]}" -X POST -H "Content-Type: application/json" \
+      -d "{\"name\":\"$priv\",\"description\":\"Yocto CI write access to $repo\",\"actions\":[\"BROWSE\",\"READ\",\"EDIT\",\"ADD\"],\"format\":\"raw\",\"repository\":\"$repo\"}" \
+      "$NEXUS_URL/service/rest/v1/security/privileges/repository-view" \
+      && echo "    privilege $priv created."
+  fi
+done
+
+if curl -sf "${AUTH[@]}" -o /dev/null "$NEXUS_URL/service/rest/v1/security/roles/$CI_ROLE"; then
+  echo "    role $CI_ROLE exists."
+else
+  privs_json="$(printf '"%s",' "${PRIVS[@]}")"; privs_json="[${privs_json%,}]"
+  curl -sf "${AUTH[@]}" -X POST -H "Content-Type: application/json" \
+    -d "{\"id\":\"$CI_ROLE\",\"name\":\"$CI_ROLE\",\"description\":\"Populate the Yocto mirrors and publish releases\",\"privileges\":$privs_json,\"roles\":[]}" \
+    "$NEXUS_URL/service/rest/v1/security/roles" \
+    && echo "    role $CI_ROLE created."
+fi
+
+if curl -sf "${AUTH[@]}" "$NEXUS_URL/service/rest/v1/security/users?userId=$CI_USER" | grep -q "\"userId\""; then
+  echo "    user $CI_USER exists -- leaving its password alone."
+  echo "    (to rotate: delete it in the UI and re-run, or use the change-password API)"
+else
+  # The password is generated here and written straight to a 0600 file. It is
+  # never echoed, never passed as a command-line argument (argv is world-readable
+  # in ps), and the JSON body goes to curl over stdin for the same reason.
+  SECRET_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/keys/nexus-write.env"
+  mkdir -p "$(dirname "$SECRET_FILE")"
+  umask 077
+  python3 - "$CI_USER" "$CI_ROLE" "$SECRET_FILE" "$NEXUS_URL" <<'PY' | \
+    curl -sf "${AUTH[@]}" -X POST -H "Content-Type: application/json" \
+      --data-binary @- "$NEXUS_URL/service/rest/v1/security/users" >/dev/null \
+    && echo "    user $CI_USER created; credentials written to keys/nexus-write.env"
+import json, secrets, sys, os
+user, role, secret_file, nexus_url = sys.argv[1:5]
+pw = secrets.token_urlsafe(32)
+fd = os.open(secret_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+with os.fdopen(fd, "w") as f:
+    f.write(f"NEXUS_URL={nexus_url}\nNEXUS_WRITE_USER={user}\nNEXUS_WRITE_PASS={pw}\n")
+json.dump({"userId": user, "firstName": "Yocto", "lastName": "CI",
+           "emailAddress": f"{user}@localhost", "password": pw,
+           "status": "active", "roles": [role]}, sys.stdout)
+PY
+fi
+
 echo ""
 echo "==> Done. Repositories:"
 curl -sf "${AUTH[@]}" "$NEXUS_URL/service/rest/v1/repositories" | python3 -c "
@@ -91,6 +156,6 @@ for r in json.load(sys.stdin):
 "
 echo ""
 echo "Anonymous read is already enabled on this Nexus instance (set up for"
-echo "maven/npm/docker) -- reads work with no credentials. Writes (CI/build"
-echo "hosts populating the mirror) need admin:\$NEXUS_ADMIN_PASSWORD or a"
-echo "dedicated token -- see docs/yocto-concepts.md."
+echo "maven/npm/docker) -- reads work with no credentials. Writes use the"
+echo "scoped '$CI_USER' account above; copy keys/nexus-write.env to the build"
+echo "host as keys/nexus.env -- see docs/yocto-concepts.md."

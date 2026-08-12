@@ -97,6 +97,7 @@ theSchultzYocto/                  <- this repo == the "schultz" layer
 │   ├── setup-pentest-tools.sh    <- install the pen-test toolchain on the build host
 │   ├── setup-nexus-mirror.sh     <- create the Nexus raw repos (sstate/source mirror + releases)
 │   ├── populate-nexus-mirror.sh  <- runs ON the build host: fill those mirrors from downloads/ + sstate-cache/
+│   ├── setup-hashserv.sh         <- runs ON the build host: shared hash-equivalence server for the sstate mirror
 │   ├── cut-release.sh            <- one command: build + verify + SBOM + archive + publish to Nexus + tag
 │   ├── ota-deploy.sh             <- ship a release to a running Pi over the air (streams from Nexus)
 │   └── deploy.sh                 <- sync + remote-build in one command, from the Mac
@@ -215,6 +216,11 @@ creating the repos does not fill them, and a mirror nobody uploads to is just a
   uploads `downloads/` and `sstate-cache/` into the two raw repos, skipping
   what is already there. The nightly runs it after each successful build, so
   the mirror tracks whatever the current image actually needs.
+- **[scripts/setup-hashserv.sh](scripts/setup-hashserv.sh)** — a shared
+  hash-equivalence server. sstate objects are named by *unihash*, and BitBake's
+  default server keeps those mappings in a socket-local database inside
+  `build/`, so a consumer computes different names and misses the whole mirror.
+  BitBake warns about exactly this combination.
 
 The same Nexus instance also hosts a third raw repo, **`schultz-releases-raw`**,
 where [scripts/cut-release.sh](scripts/cut-release.sh) publishes each signed RAUC
@@ -235,10 +241,8 @@ actually lives, not in the idea of caching itself. The other is *who can write
 to the mirror*: source tarballs are checksum-pinned and therefore
 self-defending, but sstate entries are executable build output that gets
 unpacked into later builds, so the sstate repo's write credential is a
-supply-chain credential — reads stay anonymous, writes come from
-`keys/nexus.env`. (Related known gap here: BitBake's `BB_HASHSERVE`
-hash-equivalence isn't fully reconciled with `SSTATE_MIRRORS` yet — logged, low
-priority while the mirror is lightly populated.) Deeper dive in
+supply-chain credential — reads stay anonymous, writes use a `yocto-ci` account
+scoped to the three raw repos with no delete and no admin. Deeper dive in
 [docs/yocto-concepts.md](docs/yocto-concepts.md).
 
 ## A note on `bitbake-setup`
