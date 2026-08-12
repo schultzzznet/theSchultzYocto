@@ -246,14 +246,50 @@ into shared build infrastructure instead of a place to dump files:
   mid-project (it happens), and is faster than re-fetching from the public
   internet every time.
 
-This is now real, not just templated: [scripts/setup-nexus-mirror.sh](../scripts/setup-nexus-mirror.sh)
-creates the two raw-hosted repos (`yocto-sources-raw`, `yocto-sstate-raw`)
-via Nexus's REST API, and both variables are active (uncommented) in
-[local.conf.sample](../conf/templates/schultz/local.conf.sample), pointed at
-a Nexus instance on the local network. One known rough edge: BitBake's
-`BB_HASHSERVE` (on by default) isn't fully compatible with `SSTATE_MIRRORS`
-— logs a warning, doesn't block builds, low priority to fix while the
-mirror is still lightly populated.
+[scripts/setup-nexus-mirror.sh](../scripts/setup-nexus-mirror.sh) creates the
+two raw-hosted repos (`yocto-sources-raw`, `yocto-sstate-raw`) via Nexus's REST
+API, and both variables are active (uncommented) in
+[local.conf.sample](../conf/templates/schultz/local.conf.sample), pointed at a
+Nexus instance on the local network.
+
+**Setting the variables is not the same as having a mirror**, which is worth
+recording because it stayed broken here for five weeks (2026-07-03 →
+2026-08-12) while looking configured. Two separate omissions:
+
+1. **Nothing populated the repos.** `setup-nexus-mirror.sh` creates them; no
+   script ever uploaded to them. Every fetch dutifully asked Nexus first, got a
+   404, and went to the internet — the exact behaviour you'd get with the
+   variables unset, only slower.
+   [scripts/populate-nexus-mirror.sh](../scripts/populate-nexus-mirror.sh) is
+   the missing half: it pushes `downloads/` and `sstate-cache/` up (HEAD-check
+   first, so re-runs are cheap), and the nightly calls it as step 6.
+2. **`BB_GENERATE_MIRROR_TARBALLS` was unset**, so `git://` recipes only ever
+   produced bare clones under `downloads/git2/` — nothing a mirror can serve.
+   The blast radius was the wrong half: the 169 flat files in `downloads/`
+   (1.1 GB) were mirrorable, while all 38 git clones (6.1 GB, including the
+   5.6 GB kernel) were not.
+
+A subtlety when turning that on late: bitbake packs a clone into its mirror
+tarball inside `do_fetch`, so pre-existing clones stay unpacked until their
+recipe changes. Forcing the issue with `bitbake -f -c fetch` is *not* free —
+measured here, it re-runs unpack/patch/configure/compile for that recipe
+(`e2fsprogs` went from 4 to 23 pending tasks), which on `linux-raspberrypi`
+means a full kernel rebuild. `populate-nexus-mirror.sh` therefore backfills the
+tarballs with bitbake's own `tar` invocation (copied from
+`poky/bitbake/lib/bb/fetch2/git.py`, `GitFetcher.download()`) instead, and
+leaves everything from then on to bitbake itself.
+
+**Trust boundary.** The two mirrors are not equally sensitive. Source tarballs
+are checksum-verified against `SRC_URI[sha256sum]` on every fetch, so a hostile
+mirror can only break a build, never alter one. sstate entries are executable
+build output that gets unpacked into later builds and are *not* independently
+verified — so write access to `yocto-sstate-raw` is effectively commit access to
+your images. Reads are anonymous by design; writes use the credentials in
+`keys/nexus.env`, and that account should not be a shared admin login.
+
+One known rough edge: BitBake's `BB_HASHSERVE` (on by default) isn't fully
+compatible with `SSTATE_MIRRORS` — logs a warning, doesn't block builds, low
+priority to fix while the mirror is still lightly populated.
 
 Beyond mirrors, Nexus's format-aware repo types (Debian, RPM, apt) can host
 an actual package feed if you ever want field updates via `opkg`/`apt`

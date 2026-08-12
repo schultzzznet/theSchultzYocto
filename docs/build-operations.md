@@ -100,6 +100,14 @@ A wipe means a genuinely fresh build (`Loaded 0 entries from dependency
 cache` in the log confirms it), not a fast sstate-restore — expect it to
 take as long as the very first build.
 
+Since 2026-08-12 that is less punishing than it sounds: `sstate-cache/` is
+mirrored to Nexus by
+[populate-nexus-mirror.sh](../scripts/populate-nexus-mirror.sh) after every
+nightly build. Wiping the local copy doesn't change any task signature, so a
+post-wipe build pulls the same task outputs back over the LAN via
+`SSTATE_MIRRORS` instead of recompiling them — as long as the last mirror push
+succeeded (`mirror rc=0` in the nightly's log tail).
+
 ## Stopping a build on purpose
 
 ```sh

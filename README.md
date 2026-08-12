@@ -96,6 +96,7 @@ theSchultzYocto/                  <- this repo == the "schultz" layer
 │   ├── upload-pentest.sh         <- push pen-test findings + a DT mirror to DefectDojo
 │   ├── setup-pentest-tools.sh    <- install the pen-test toolchain on the build host
 │   ├── setup-nexus-mirror.sh     <- create the Nexus raw repos (sstate/source mirror + releases)
+│   ├── populate-nexus-mirror.sh  <- runs ON the build host: fill those mirrors from downloads/ + sstate-cache/
 │   ├── cut-release.sh            <- one command: build + verify + SBOM + archive + publish to Nexus + tag
 │   ├── ota-deploy.sh             <- ship a release to a running Pi over the air (streams from Nexus)
 │   └── deploy.sh                 <- sync + remote-build in one command, from the Mac
@@ -190,10 +191,9 @@ recipe would rebuild `gcc-cross`, `glibc`, and the whole world every time; the
 cache is what makes iterative Yocto usable at all. The Yocto project itself runs
 a public sstate mirror (`sstate.yoctoproject.org`) for precisely this reason.
 
-Two things get mirrored here — both activated in
-[local.conf.sample](conf/templates/schultz/local.conf.sample), pointed at a
-**Nexus** raw repo on the LAN (created by
-[scripts/setup-nexus-mirror.sh](scripts/setup-nexus-mirror.sh)):
+Two things get mirrored here — both pointed at a **Nexus** raw repo on the LAN
+in [local.conf.sample](conf/templates/schultz/local.conf.sample), with the repos
+created by [scripts/setup-nexus-mirror.sh](scripts/setup-nexus-mirror.sh):
 
 - **`SOURCE_MIRROR_URL`** — the pinned upstream source tarballs (`DL_DIR`).
   Pure resilience: upstream tags vanish and projects go offline mid-project.
@@ -201,6 +201,20 @@ Two things get mirrored here — both activated in
   so a mirror can't smuggle anything in — it either matches the pin or the
   build fails.
 - **`SSTATE_MIRRORS`** — the compiled task outputs described above.
+
+Setting those two variables is necessary but *not sufficient*, which is worth
+saying plainly because it went unnoticed here from 2026-07-03 to 2026-08-12:
+creating the repos does not fill them, and a mirror nobody uploads to is just a
+404 on the way to the internet. Two things close that gap:
+
+- **`BB_GENERATE_MIRROR_TARBALLS = "1"`** — without it, `git://` recipes leave
+  bare clones in `downloads/git2/` that are never packed into a mirrorable
+  file. Only the flat files in `downloads/` were mirrorable; the kernel and 37
+  other git clones (6.1 GB) were not.
+- **[scripts/populate-nexus-mirror.sh](scripts/populate-nexus-mirror.sh)** —
+  uploads `downloads/` and `sstate-cache/` into the two raw repos, skipping
+  what is already there. The nightly runs it after each successful build, so
+  the mirror tracks whatever the current image actually needs.
 
 The same Nexus instance also hosts a third raw repo, **`schultz-releases-raw`**,
 where [scripts/cut-release.sh](scripts/cut-release.sh) publishes each signed RAUC
@@ -217,10 +231,15 @@ sstate and rebuild to an identical result — the cache is an optimization, neve
 the source of truth. The one thing that genuinely needs care is that task
 **signatures be complete** (an output must not depend on anything not captured
 in its hash, e.g. a host path or timestamp); that's where sstate correctness
-actually lives, not in the idea of caching itself. (Related known gap here:
-BitBake's `BB_HASHSERVE` hash-equivalence isn't fully reconciled with
-`SSTATE_MIRRORS` yet — logged, low priority while the mirror is lightly
-populated.) Deeper dive in [docs/yocto-concepts.md](docs/yocto-concepts.md).
+actually lives, not in the idea of caching itself. The other is *who can write
+to the mirror*: source tarballs are checksum-pinned and therefore
+self-defending, but sstate entries are executable build output that gets
+unpacked into later builds, so the sstate repo's write credential is a
+supply-chain credential — reads stay anonymous, writes come from
+`keys/nexus.env`. (Related known gap here: BitBake's `BB_HASHSERVE`
+hash-equivalence isn't fully reconciled with `SSTATE_MIRRORS` yet — logged, low
+priority while the mirror is lightly populated.) Deeper dive in
+[docs/yocto-concepts.md](docs/yocto-concepts.md).
 
 ## A note on `bitbake-setup`
 

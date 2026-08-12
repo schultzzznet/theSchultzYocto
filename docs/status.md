@@ -23,7 +23,8 @@ pending) · ❌ not possible here (with reason)
 | Boots on a real Pi 3 B+ | ✅ | first boot 2026-07-05 |
 | Serial console | ✅ | `enable_uart=1` + `console=ttyS0,115200`, over the [ESP32 WiFi bridge](../tools/esp32-serial-bridge/) |
 | Networking (eth0 DHCP + SSH) | ✅ | reachable + `ssh root@…`; note: Pi 3 B+ `lan78xx` inits late, so on the sysvinit image re-run `udhcpc -i eth0` after reboot (the systemd RAUC image handles it) |
-| Reproducible remote build | ✅ | `scripts/remote-build.sh` on the Pi 5 build host; sstate/source via a Nexus mirror |
+| Reproducible remote build | ✅ | `scripts/remote-build.sh` on the Pi 5 build host |
+| Shared source/sstate mirror (Nexus) | ✅ | `SOURCE_MIRROR_URL` + `SSTATE_MIRRORS` were set on 2026-07-03 but pointed at **empty** repos until `populate-nexus-mirror.sh` (2026-08-12) started filling them; needed `BB_GENERATE_MIRROR_TARBALLS` too, or the 38 git clones stay unmirrorable |
 
 ## Supply-chain security
 
