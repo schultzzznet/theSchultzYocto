@@ -315,6 +315,13 @@ security control.
   roadmap of your weaknesses.
 - **The scanner is not the product.** Keep the humans on the real signal (§7);
   the automation's job is to make that signal small and honest.
+- **Nothing in this pipeline runs here.** Dependency-Track, DefectDojo and the
+  Nexus mirror all live on other machines, so a build depends on hosts this repo
+  does not control. Which services those are, where each credential lives, and
+  what breaks when one disappears is catalogued once for all the projects in the
+  [external services registry](../../SynologyIndexer3.0/EXTERNAL_SERVICES.md)
+  (sibling `SynologyIndexer3.0` repo) — update it when this pipeline gains or
+  drops a dependency.
 
 ---
 
