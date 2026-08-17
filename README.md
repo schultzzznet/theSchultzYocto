@@ -12,6 +12,12 @@ spare **Raspberry Pi 3 Model B+**, targeting the **64-bit** BSP
 > how the tiers stack, where the seams are, and what is live vs. roadmap. Concretely, this
 > repo's **CycloneDX SBOM, CPE-matched CVEs and VEX** are uploaded to that cluster's
 > Dependency-Track, and its `schultz-agent` heartbeats into `fleet-app` there.
+>
+> The estate is four repos — this one, [`theMowerRetrofit`](https://github.com/schultzzznet/theMowerRetrofit),
+> [`the-docker-swarm-ai`](https://github.com/schultzzznet/the-docker-swarm-ai) and
+> [`theDroneSwarm`](https://github.com/schultzzznet/theDroneSwarm) — grouped by the topic
+> [`schultzzznet-estate`](https://github.com/search?q=topic%3Aschultzzznet-estate) and indexed
+> from [github.com/schultzzznet](https://github.com/schultzzznet).
 
 This repo *is* a Yocto layer (collection name `schultz`) — it doesn't contain
 Poky or the Raspberry Pi BSP layer itself; those get cloned alongside it on
