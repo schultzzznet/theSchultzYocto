@@ -4,6 +4,15 @@ Learning project: build a custom, minimal, headless Yocto Linux image for a
 spare **Raspberry Pi 3 Model B+**, targeting the **64-bit** BSP
 (`raspberrypi3-64`).
 
+> **Where this fits.** This repo is the *platform* tier of a larger estate: the device OS that
+> `theMowerRetrofit` builds on and that reports into a k3s control plane. There is no single
+> "parent" repo, but the closest thing to a map is
+> [`docs/ECOSYSTEM.md`](https://github.com/schultzzznet/the-docker-swarm-ai/blob/master/docs/ECOSYSTEM.md)
+> in [`the-docker-swarm-ai`](https://github.com/schultzzznet/the-docker-swarm-ai) — it explains
+> how the tiers stack, where the seams are, and what is live vs. roadmap. Concretely, this
+> repo's **CycloneDX SBOM, CPE-matched CVEs and VEX** are uploaded to that cluster's
+> Dependency-Track, and its `schultz-agent` heartbeats into `fleet-app` there.
+
 This repo *is* a Yocto layer (collection name `schultz`) — it doesn't contain
 Poky or the Raspberry Pi BSP layer itself; those get cloned alongside it on
 the Linux build machine (see [docs/first-build.md](docs/first-build.md)).
