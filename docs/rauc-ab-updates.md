@@ -226,7 +226,32 @@ power-cycle.
 **Still open:**
 - **Per-device SSH host keys.** `read-only-rootfs` bakes them at build time, so
   every device shares them; for per-device keys, persist `/etc/ssh` onto `/data`
-  and regenerate on first boot.
+  and regenerate on first boot. On the standard (ext4) image the opposite bites:
+  each slot generates **its own** keys on first boot, so an A→B switch trips
+  `REMOTE HOST IDENTIFICATION HAS CHANGED` on every workstation. Persisting
+  `/etc/ssh` to `/data` fixes both ends of this.
+- **U-Boot stays pinned at 2024.01 — cause of the 2025.04 failure unknown.**
+  Upstream meta-rauc-community's newer `scarthgap` branch requires
+  `lts-u-boot-mixin` (U-Boot 2025.04, which exists to support the RPi5). Tried on
+  the real Pi 3 B+ 2026-08-19: it boots, but `boot.scr` never takes effect —
+  `/proc/cmdline` holds the VideoCore firmware's args, so no `rauc.slot=`, no
+  `panic=10`, and no `BOOT_ORDER` handling. Slot selection and rollback are gone
+  while `rauc status` still reports both slots "good". Reverted. It is **not**
+  simply bootstd: 2024.01 also runs `bootcmd=bootflow scan` and does source
+  `boot.scr`, so the difference is elsewhere in 2025.04's `rpi_arm64_defconfig`.
+- **OTA-able kernels.** Upstream's newer `boot.cmd.in` loads the kernel from the
+  A/B rootfs (`load ${BOOT_DEV} … boot/Image`) instead of `fatload`-ing the shared
+  one — that's what their U-Boot SquashFS patch is for. Adopting it would make
+  kernel updates shippable as bundles instead of card swaps. The bootloader
+  itself can never be A/B here: the Pi 3 boot ROM always loads the first FAT
+  partition, and `RAUC_BUNDLE_SLOTS = "rootfs"` carries no `/boot` image.
+
+**Operational gotcha (verified 2026-08-19):** after `rauc status mark-bad`,
+running `mark-good other` is **not** enough to restore the other slot. It resets
+`BOOT_x_LEFT` but leaves the slot out of `BOOT_ORDER`, and RAUC's U-Boot backend
+reports any slot missing from `BOOT_ORDER` as `bad` — so you end up single-slot
+with no fallback. Use `rauc status mark-active other`, which rewrites
+`BOOT_ORDER=A B` and makes that slot the next boot.
 
 **Stronger still (follow-on):** put the squashfs on **dm-verity** for continuous
 runtime integrity (every block hash-checked against a signed root) — that turns

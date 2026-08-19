@@ -73,7 +73,7 @@ Deep dive: [fleet-app.md](fleet-app.md).
 
 | Capability | Status | Notes |
 |---|---|---|
-| A/B dual-slot boot (U-Boot) | ✅ | verified 2026-07-06: U-Boot booted slot A, then B after an update, then rolled back to A (serial trace `A → B → A`) |
+| A/B dual-slot boot (U-Boot) | ✅ | verified 2026-07-06: U-Boot booted slot A, then B after an update, then rolled back to A (serial trace `A → B → A`); **re-proven 2026-08-19** on a freshly flashed card: `mark-bad` → `BOOT_ORDER=B` → serial `Found valid RAUC slot B` (`root=…p3 rauc.slot=B`) → `mark-active other` → `Found valid RAUC slot A`, ending with both slots `good` |
 | OTA update (`rauc install`) | ✅ | delivered **over the network** to the *running* Pi (`2026.07.0`→`2026.07.1`) with zero downtime: written to idle slot B, one reboot switched to B, `/etc/os-release` flipped; a marked-bad slot auto-rolled back to A |
 | Signed + integrity-checked bundles | ✅ | `verity` (dm-verity) + signed; device keyring = our dev cert — signature verified on-device at install |
 | Release artifact store + OTA source | ✅ | each release published to the Nexus raw repo `schultz-releases-raw`; the Pi `rauc install`s **straight from Nexus** (HTTP range → true streaming, no scp) via `ota-deploy.sh <version> <ip> --reboot` |
