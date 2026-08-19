@@ -84,12 +84,10 @@ fi
 # 1b. Track the Yocto LTS branch. scarthgap (5.0) gets CVE backports as point
 #     releases -- without pulling them, cve-check keeps reporting CVEs that LTS
 #     has already fixed upstream, and the image never gets the fix. Pull ff-only
-#     ONLY on layers actually on the scarthgap branch, and only the three listed
-#     here: meta-rauc-community and meta-lts-mixins carry the bootloader/A-B
-#     integration, so they move deliberately with an on-hardware retest, never
-#     unattended overnight. A failed pull is non-fatal: we build whatever is
-#     checked out. Set SCHULTZ_UPDATE_LTS_LAYERS=0 to freeze the layers (e.g. to
-#     reproduce a build).
+#     ONLY on layers actually on the scarthgap branch, so the deliberately
+#     pinned meta-rauc-community (detached at b28c04a) is left untouched. A
+#     failed pull is non-fatal: we build whatever is checked out. Set
+#     SCHULTZ_UPDATE_LTS_LAYERS=0 to freeze the layers (e.g. to reproduce a build).
 if [ "${SCHULTZ_UPDATE_LTS_LAYERS:-1}" = "1" ]; then
   echo "-- tracking Yocto LTS (scarthgap) point-releases --"
   for _layer in poky meta-raspberrypi meta-rauc; do

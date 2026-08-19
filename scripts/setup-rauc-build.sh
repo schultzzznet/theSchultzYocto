@@ -9,8 +9,7 @@
 # "rauc rauc-conf" are already there) and layers on top the bits that turn a
 # stock RPi build into an A/B RAUC one, following meta-rauc-community's
 # meta-rauc-raspberrypi reference:
-#   - the meta-rauc + meta-rauc-raspberrypi layers, plus lts-u-boot-mixin
-#     (u-boot 2025.04) which meta-rauc-raspberrypi depends on
+#   - the meta-rauc + meta-rauc-raspberrypi layers
 #   - U-Boot as the bootloader (RPI_USE_U_BOOT) + a UART console
 #   - systemd (the reference, the /data grow service, and /home growfs need it)
 #   - the dual-slot wic layout + ext4 rootfs
@@ -31,7 +30,7 @@ WORK_DIR="$(dirname "$REPO_DIR")"
 cd "$WORK_DIR"
 
 # 1. RAUC layers (idempotent clone).
-if [ ! -d meta-rauc ] || [ ! -d meta-rauc-community ] || [ ! -d meta-lts-mixins ]; then
+if [ ! -d meta-rauc ] || [ ! -d meta-rauc-community ]; then
   "$REPO_DIR/scripts/fetch-rauc-layers.sh"
 fi
 
@@ -45,18 +44,14 @@ else
 fi
 set -u
 
-# 3. meta-rauc is already in the base template's bblayers; add the RPi
-#    integration layer and the lts-u-boot-mixin it depends on (u-boot 2025.04 --
-#    meta-rauc-raspberrypi's rpi_arm64_defconfig.patch no longer applies to
-#    poky scarthgap's 2024.01). The mixin goes first, or the dependency check
-#    on the layer that needs it fails.
-for _layer in "$WORK_DIR/meta-lts-mixins" "$WORK_DIR/meta-rauc-community/meta-rauc-raspberrypi"; do
-  if bitbake-layers show-layers 2>/dev/null | grep -qF "$_layer"; then
-    echo "$(basename "$_layer") already added"
-  else
-    bitbake-layers add-layer "$_layer"
-  fi
-done
+# 3. meta-rauc is already in the base template's bblayers; add only the RPi
+#    integration layer (meta-rauc-community is pinned to a scarthgap-compatible
+#    revision by fetch-rauc-layers.sh).
+if bitbake-layers show-layers 2>/dev/null | grep -q "meta-rauc-raspberrypi"; then
+  echo "meta-rauc-raspberrypi already added"
+else
+  bitbake-layers add-layer "$WORK_DIR/meta-rauc-community/meta-rauc-raspberrypi"
+fi
 
 # 4. Append the RAUC config block to local.conf exactly once (marker-guarded).
 LC="$WORK_DIR/build-rauc/conf/local.conf"
