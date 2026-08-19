@@ -36,11 +36,16 @@ fi
 # scarthgap, so it refuses to load on our build. Pin to b28c04a -- the newest
 # master commit still compatible with scarthgap ("meta-rauc-raspberrypi:
 # Nanbield and Scarthgap"; the next commit moved to styhead and dropped it).
-# NOTE (re-checked 2026-08-19): upstream has since grown a real `scarthgap`
-# branch, 80 commits ahead of this pin and still LAYERSERIES_COMPAT
-# "nanbield scarthgap" -- a candidate to track instead, but it pulls in a new
-# lts-u-boot-mixins layer dependency, so moving needs a rebuild + on-hardware
-# A/B retest, not just an edit here.
+# DO NOT "upgrade" this to upstream's newer `scarthgap` BRANCH (222c6127, 80
+# commits ahead). Tried on real hardware 2026-08-19 and reverted: that branch
+# hard-depends on lts-u-boot-mixin (u-boot 2025.04, for RPi5), and 2025.04's
+# rpi_arm64_defconfig boots via bootstd -- `bootcmd=bootflow scan` -- so our
+# boot.scr is never sourced. The Pi 3 B+ then came up with the VideoCore
+# firmware's bootargs: no rauc.slot=, no panic=10, no BOOT_ORDER handling, i.e.
+# no slot switching and no rollback, while `rauc status` still reported both
+# slots "good". It only booted at all because /boot/cmdline.txt hardcodes
+# root=/dev/mmcblk0p2. (Ethernet also never enumerated.) Fixing it means
+# restoring script boot in that u-boot's defconfig -- a real project, not a pin bump.
 # Idempotent: re-checks out the pin even if the dir already existed.
 RAUC_COMMUNITY_REV="b28c04a"
 git -C meta-rauc-community checkout -q "$RAUC_COMMUNITY_REV"
