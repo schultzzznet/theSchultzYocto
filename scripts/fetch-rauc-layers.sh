@@ -31,13 +31,17 @@ else
   git clone https://github.com/rauc/meta-rauc-community.git
 fi
 
-# meta-rauc-community doesn't use per-release branches -- master tracks the
-# current dev release (wrynose as of 2026-07), whose meta-rauc-raspberrypi
-# LAYERSERIES_COMPAT no longer lists scarthgap, so it refuses to load on our
-# build. Pin to b28c04a -- the newest commit still compatible with scarthgap
-# ("meta-rauc-raspberrypi: Nanbield and Scarthgap"; the next commit moved to
-# styhead and dropped it). Idempotent: re-checks out the pin even if the dir
-# already existed.
+# meta-rauc-community's master tracks the current dev release (wrynose as of
+# 2026-07), whose meta-rauc-raspberrypi LAYERSERIES_COMPAT no longer lists
+# scarthgap, so it refuses to load on our build. Pin to b28c04a -- the newest
+# master commit still compatible with scarthgap ("meta-rauc-raspberrypi:
+# Nanbield and Scarthgap"; the next commit moved to styhead and dropped it).
+# NOTE (re-checked 2026-08-19): upstream has since grown a real `scarthgap`
+# branch, 80 commits ahead of this pin and still LAYERSERIES_COMPAT
+# "nanbield scarthgap" -- a candidate to track instead, but it pulls in a new
+# lts-u-boot-mixins layer dependency, so moving needs a rebuild + on-hardware
+# A/B retest, not just an edit here.
+# Idempotent: re-checks out the pin even if the dir already existed.
 RAUC_COMMUNITY_REV="b28c04a"
 git -C meta-rauc-community checkout -q "$RAUC_COMMUNITY_REV"
 echo "meta-rauc-community pinned to $RAUC_COMMUNITY_REV (scarthgap-compatible)"

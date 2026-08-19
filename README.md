@@ -169,21 +169,23 @@ Full walkthrough, including flashing the SD card, in
 This project pins **`scarthgap` (Yocto 5.0 LTS)** across poky, `meta-raspberrypi`,
 and `meta-rauc` — see [scripts/fetch-layers.sh](scripts/fetch-layers.sh) and
 [scripts/fetch-rauc-layers.sh](scripts/fetch-rauc-layers.sh). It's deliberately
-*not* the newest Yocto (**`wrynose` / 6.0 LTS** shipped April 2026); it's the
-newest release the **Raspberry Pi BSP actually supports**, which is what decides
-it here:
+*not* the newest Yocto LTS (**`wrynose` / 6.0**); it's the newest release the
+whole **layer set actually supports**, which is what decides it here:
 
-- `meta-raspberrypi`'s branches currently stop at `whinlatter` (5.3) — there is
-  **no `wrynose` branch yet**, so 6.0 simply isn't an option for this board.
+- `meta-raspberrypi` **now has a `wrynose` branch** (checked 2026-08-19; it
+  declares `LAYERSERIES_COMPAT_raspberrypi = "wrynose"`), so the Pi BSP no
+  longer blocks 6.0 — but **poky has not cut a `wrynose` branch**: its newest
+  release branch is `walnascar` and its newest tags are `yocto-5.2.x`. The gate
+  simply moved from the BSP to poky itself.
 - Every `meta-raspberrypi` branch *newer* than scarthgap (`styhead` 5.1,
   `walnascar` 5.2, `whinlatter` 5.3) is a **non-LTS that is already EOL**.
-- So scarthgap is the newest **LTS with a Pi BSP branch** — still actively
-  maintained (5.0.18, June 2026) and supported until **April 2028**.
+- So scarthgap is still the newest **LTS we can actually assemble** — actively
+  maintained (**5.0.19**) and supported until **April 2028**.
 
-**The move to make later:** once `agherzan/meta-raspberrypi` publishes a
-`wrynose` branch, bump the fetch scripts from `scarthgap` to `wrynose` to land
-on the 6.0 LTS (supported until 2030). `meta-rauc` is already ahead — it *has* a
-`wrynose` branch — so only the Pi BSP gates the jump.
+**The move to make later:** once poky publishes a `wrynose` branch to match the
+layers, bump the fetch scripts from `scarthgap` to `wrynose` to land on the 6.0
+LTS (supported until 2030). `meta-rauc` and `meta-raspberrypi` are both already
+there; poky is the one left.
 
 **How you'll know it's time — Renovate won't tell you.** The catch isn't that
 the releases lack numbers — they have them (scarthgap = 5.0, wrynose = 6.0, and
@@ -195,11 +197,17 @@ containing a "5.0"/"6.0" for a version-sorter to compare — and no off-the-shel
 Renovate/Dependabot manager knows the codename→number table. (The move is also
 gated on the `wrynose` branch *existing at all*, which is an existence check,
 not a version comparison.) So the trigger stays a one-liner — run it now and
-then, or drop it in a scheduled CI job:
+then, or drop it in a scheduled CI job. Check **every** layer, not just the BSP:
+a layer repo can publish a codename branch before poky does, and a bump that
+lands on three of four layers is worse than no bump at all.
 
 ```sh
-git ls-remote --heads https://github.com/agherzan/meta-raspberrypi \
-  | grep -q wrynose && echo "meta-raspberrypi has wrynose -- time to bump scarthgap -> wrynose."
+for r in https://git.yoctoproject.org/poky \
+         https://github.com/agherzan/meta-raspberrypi \
+         https://github.com/rauc/meta-rauc; do
+  git ls-remote --heads "$r" refs/heads/wrynose | grep -q . \
+    && echo "wrynose: $r" || echo "NOT YET:  $r"
+done
 ```
 
 ## A note on caching (the Nexus mirror) — isn't rebuilding from source the point?
