@@ -48,13 +48,18 @@ set -u
 # 3. meta-rauc is already in the base template's bblayers; add the RPi
 #    integration layer and the lts-u-boot-mixin it depends on (u-boot 2025.04 --
 #    meta-rauc-raspberrypi's rpi_arm64_defconfig.patch no longer applies to
-#    poky scarthgap's 2024.01). The mixin goes first, or the dependency check
-#    on the layer that needs it fails.
+#    poky scarthgap's 2024.01).
+#    Appended as `BBLAYERS +=` rather than via `bitbake-layers add-layer`: once
+#    meta-rauc-raspberrypi is in the list, every bitbake-layers call aborts with
+#    "depends on layer 'lts-u-boot-mixin', but this layer is not enabled" -- the
+#    tool that would add the missing layer needs the config to already be valid.
+BL="$WORK_DIR/build-rauc/conf/bblayers.conf"
 for _layer in "$WORK_DIR/meta-lts-mixins" "$WORK_DIR/meta-rauc-community/meta-rauc-raspberrypi"; do
-  if bitbake-layers show-layers 2>/dev/null | grep -qF "$_layer"; then
-    echo "$(basename "$_layer") already added"
+  if grep -qF "$_layer" "$BL"; then
+    echo "$(basename "$_layer") already in bblayers.conf"
   else
-    bitbake-layers add-layer "$_layer"
+    printf 'BBLAYERS += "%s"\n' "$_layer" >> "$BL"
+    echo "added $(basename "$_layer") to bblayers.conf"
   fi
 done
 
