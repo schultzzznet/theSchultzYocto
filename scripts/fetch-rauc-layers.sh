@@ -38,14 +38,16 @@ fi
 # Nanbield and Scarthgap"; the next commit moved to styhead and dropped it).
 # DO NOT "upgrade" this to upstream's newer `scarthgap` BRANCH (222c6127, 80
 # commits ahead). Tried on real hardware 2026-08-19 and reverted: that branch
-# hard-depends on lts-u-boot-mixin (u-boot 2025.04, for RPi5), and 2025.04's
-# rpi_arm64_defconfig boots via bootstd -- `bootcmd=bootflow scan` -- so our
-# boot.scr is never sourced. The Pi 3 B+ then came up with the VideoCore
-# firmware's bootargs: no rauc.slot=, no panic=10, no BOOT_ORDER handling, i.e.
-# no slot switching and no rollback, while `rauc status` still reported both
-# slots "good". It only booted at all because /boot/cmdline.txt hardcodes
-# root=/dev/mmcblk0p2. (Ethernet also never enumerated.) Fixing it means
-# restoring script boot in that u-boot's defconfig -- a real project, not a pin bump.
+# hard-depends on lts-u-boot-mixin (u-boot 2025.04, which exists for RPi5), and
+# under 2025.04 our boot.scr never took effect on the Pi 3 B+ -- /proc/cmdline
+# and the saved bootargs were the VideoCore firmware's, with no rauc.slot=, no
+# panic=10 and no BOOT_ORDER handling, i.e. no slot switching and no rollback,
+# while `rauc status` still reported both slots "good". It only booted at all
+# because /boot/cmdline.txt hardcodes root=/dev/mmcblk0p2.
+# The mechanism is NOT bootstd per se: 2024.01 also runs `bootcmd=bootflow scan`
+# and does source boot.scr correctly (verified on the reverted card) -- so
+# something else in 2025.04's rpi_arm64_defconfig changes which bootflow wins.
+# Diagnosing that is a project, not a pin bump.
 # Idempotent: re-checks out the pin even if the dir already existed.
 RAUC_COMMUNITY_REV="b28c04a"
 git -C meta-rauc-community checkout -q "$RAUC_COMMUNITY_REV"
