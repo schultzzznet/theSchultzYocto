@@ -1,9 +1,9 @@
 # theSchultzYocto — status at a glance
 
 A living snapshot of what's built, what's **verified on real hardware**, and
-what's deliberately out of reach. Last updated **2026-07-14** (a Tesla-style
-fleet dashboard deployed to the k3s cluster + an on-device agent, verified live:
-the real Raspberry Pi 3 B+ reports into the dashboard over the air).
+what's deliberately out of reach. Last updated **2026-08-19** (re-verified the
+layer pins on hardware: upstream's newer RAUC/RPi layer + U-Boot 2025.04 breaks
+A/B *silently*, so the scarthgap pins stay — see "Updates &amp; boot" below).
 
 **Latest release:** `2026.07.1` (codename `scarthgap`) — Ubuntu-style CalVer,
 built on Yocto 5.0.19 LTS, pinned by git tag `v2026.07.1` and its
@@ -80,6 +80,7 @@ Deep dive: [fleet-app.md](fleet-app.md).
 | Scripted release cut | ✅ | `cut-release.sh`: build → verify `rauc info` == version → SBOM/VEX to DT → archive + `PROVENANCE.txt` → publish to Nexus → git tag |
 | Hardened variant (squashfs, immutable) | 🟢 | `schultz-image-hardened`/`schultz-bundle-hardened`: no debug-tweaks + read-only-rootfs + **squashfs** + baked SSH key. **Proven booting on the real Pi 3 B+ (2026-07-07): `/dev/mmcblk0p3 on / type squashfs (ro)`.** Path: flash the published base image (`base-images/schultz-ab-base-squashfs-kernel.wic.gz` — squashfs-capable `/boot` kernel, `panic=10`, `type=raw` slots, `rootfstype` dropped for auto-detect), boot ext4 slot A, then `SCHULTZ_BUNDLE_BASENAME=schultz-bundle-hardened ota-deploy.sh 2026.07.1-hardened <ip> --local --reboot` copies the 35 MB squashfs to slot B and boots it. `panic=10` auto-reboots + rolls back a bad slot with no human (proven live). **Cut as tracked release `2026.07.1-hardened`: SBOM+VEX in Dependency-Track (56 findings), bundle+image+SBOM+VEX+PROVENANCE on Nexus, git tag `v2026.07.1-hardened`, and re-deployed by true HTTP-range streaming straight from Nexus.** See [rauc-ab-updates](rauc-ab-updates.md) |
 | Hardware secure boot | ❌ | the Pi 3 boot ROM loads firmware from the FAT partition **unsigned** — a hardware ceiling, not a config gap (needs Pi 4/5 + fused keys / TPM) |
+| Bootloader pinned to U-Boot 2024.01 | ✅ | **deliberate, and re-proven on hardware 2026-08-19.** Taking upstream meta-rauc-community's newer `scarthgap` branch drags in `lts-u-boot-mixin` (U-Boot 2025.04, which exists for the RPi5); on the Pi 3 B+ our `boot.scr` then never took effect — `/proc/cmdline` carried the VideoCore firmware's args with **no `rauc.slot=`, no `panic=10`, no `BOOT_ORDER` handling**, so no slot switching and no rollback. It still booted (because `/boot/cmdline.txt` hardcodes `root=/dev/mmcblk0p2`) and `rauc status` still reported both slots "good" — **the failure is invisible from userspace**; only the serial console showed it. Reverted; the good card proves `rauc.slot=A` + `panic=10` are back. Note a bootloader change reaches hardware **only by SD re-flash** — `RAUC_BUNDLE_SLOTS = "rootfs"`, and the Pi 3 boot ROM always loads the first FAT partition, so `/boot` cannot be A/B |
 
 Deep dive + the on-hardware rollback demo: [rauc-ab-updates.md](rauc-ab-updates.md).
 
