@@ -79,6 +79,13 @@ RAUC image (U-Boot + dual rootfs slots), flashing it, and doing a live update
 and rollback on the Pi over a serial console — the real payoff of rolling your
 own distro.
 
+Wondering why we chose Yocto over Buildroot, RAUC over Mender, or Nexus over
+Artifactory — or which things are still open?
+[docs/TOOLING.md](docs/TOOLING.md) is the choices-and-alternatives register,
+in the same format as the sibling repo's. [docs/GAPS.md](docs/GAPS.md) is the
+single consolidated list of open items, missing proofs, and deliberate ceilings
+— replaces hunting through five docs for "Still open" sections.
+
 ## Why this exists
 
 Short version: yes, RPi3 + Yocto is a genuinely good way to actually learn
