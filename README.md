@@ -176,23 +176,24 @@ Full walkthrough, including flashing the SD card, in
 This project pins **`scarthgap` (Yocto 5.0 LTS)** across poky, `meta-raspberrypi`,
 and `meta-rauc` — see [scripts/fetch-layers.sh](scripts/fetch-layers.sh) and
 [scripts/fetch-rauc-layers.sh](scripts/fetch-rauc-layers.sh). It's deliberately
-*not* the newest Yocto LTS (**`wrynose` / 6.0**); it's the newest release the
-whole **layer set actually supports**, which is what decides it here:
+*not* the newest Yocto LTS (**`wrynose` / 6.0**); the bump is ready to happen but
+is no longer a one-line branch swap — it's a porting project:
 
-- `meta-raspberrypi` **now has a `wrynose` branch** (checked 2026-08-19; it
-  declares `LAYERSERIES_COMPAT_raspberrypi = "wrynose"`), so the Pi BSP no
-  longer blocks 6.0 — but **poky has not cut a `wrynose` branch**: its newest
-  release branch is `walnascar` and its newest tags are `yocto-5.2.x`. The gate
-  simply moved from the BSP to poky itself.
-- Every `meta-raspberrypi` branch *newer* than scarthgap (`styhead` 5.1,
-  `walnascar` 5.2, `whinlatter` 5.3) is a **non-LTS that is already EOL**.
-- So scarthgap is still the newest **LTS we can actually assemble** — actively
-  maintained (**5.0.19**) and supported until **April 2028**.
+- **`poky` is discontinued as a convenience bundle.** The `git.yoctoproject.org/poky`
+  repo's `master` branch was frozen in November 2025 ("no longer being updated");
+  wrynose shipped April 2026 as separate `oe-core` + `bitbake` repos. There will be
+  no `poky/wrynose` branch; our `fetch-layers.sh` approach needs rethinking.
+- **`inherit cve-check` is removed in 6.0**, replaced by `sbom-cve-check`. Our CVE
+  pipeline — `local.conf`, the nightly scan, `manifest-to-cyclonedx.py`, and the
+  audit docs — all depend on it. This needs a real porting effort.
+- SPDX 2.2 removed (use SPDX 3); `.wks` files must move to `files/wic/`.
 
-**The move to make later:** once poky publishes a `wrynose` branch to match the
-layers, bump the fetch scripts from `scarthgap` to `wrynose` to land on the 6.0
-LTS (supported until 2030). `meta-rauc` and `meta-raspberrypi` are both already
-there; poky is the one left.
+So scarthgap (5.0.19, LTS until April 2028) remains the right pin for now.
+The wrynose migration is tracked in [docs/GAPS.md](docs/GAPS.md).
+
+**The move to make later:** understand the new `oe-core` + `bitbake` direct setup
+(replacing poky), port the CVE pipeline from `cve-check` to `sbom-cve-check`, then
+bump. The BSP (`meta-raspberrypi`) and RAUC layers already have `wrynose` branches.
 
 **How you'll know it's time — Renovate won't tell you.** The catch isn't that
 the releases lack numbers — they have them (scarthgap = 5.0, wrynose = 6.0, and
@@ -200,22 +201,10 @@ the releases lack numbers — they have them (scarthgap = 5.0, wrynose = 6.0, an
 *branch name* (`scarthgap`), and the number↔codename mapping lives on the Yocto
 wiki, **not in the git refs Renovate reads**: `meta-raspberrypi`'s branches are
 bare codenames (`scarthgap`, `styhead`, `walnascar`, `whinlatter`), none
-containing a "5.0"/"6.0" for a version-sorter to compare — and no off-the-shelf
-Renovate/Dependabot manager knows the codename→number table. (The move is also
-gated on the `wrynose` branch *existing at all*, which is an existence check,
-not a version comparison.) So the trigger stays a one-liner — run it now and
-then, or drop it in a scheduled CI job. Check **every** layer, not just the BSP:
-a layer repo can publish a codename branch before poky does, and a bump that
-lands on three of four layers is worse than no bump at all.
-
-```sh
-for r in https://git.yoctoproject.org/poky \
-         https://github.com/agherzan/meta-raspberrypi \
-         https://github.com/rauc/meta-rauc; do
-  git ls-remote --heads "$r" refs/heads/wrynose | grep -q . \
-    && echo "wrynose: $r" || echo "NOT YET:  $r"
-done
-```
+containing a "5.0"/"6.0" for a version-sorter to compare. Subscribe to
+[yocto-announce](https://lists.yoctoproject.org/g/yocto-announce) for release
+announcements (send a blank email to
+`yocto-announce+subscribe@lists.yoctoproject.org`).
 
 ## A note on caching (the Nexus mirror) — isn't rebuilding from source the point?
 
