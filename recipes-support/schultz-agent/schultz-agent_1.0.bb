@@ -11,7 +11,8 @@ SRC_URI = "file://schultz-agent \
            file://schultz-agent.service \
            file://schultz-agent.conf"
 
-S = "${WORKDIR}"
+# wrynose: S = ${WORKDIR} was removed; use ${UNPACKDIR} for file:// sources.
+S = "${UNPACKDIR}"
 
 # The agent uses only stdlib (urllib/json/socket/subprocess). Pin the granular
 # python3 packages -- full python3 pushes the ext4 rootfs over the 213 MB A/B
