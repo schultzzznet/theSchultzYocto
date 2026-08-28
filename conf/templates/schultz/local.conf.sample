@@ -99,12 +99,13 @@ PACKAGE_FEED_GPG_PASSPHRASE_FILE = "${TOPDIR}/../keys/gpg-passphrase.txt"
 DISTRO_FEATURES:append = " rauc"
 IMAGE_INSTALL:append = " rauc rauc-conf"
 
-# --- Activated 2026-07-03: cve-check ---
-# Scans package versions against a local NVD feed mirror at build time (in
-# addition to, not instead of, Dependency-Track's continuous post-build
-# re-analysis -- see docs/yocto-concepts.md). Report per image:
-# tmp/deploy/images/<machine>/<image>.rootfs.cve
-INHERIT += "cve-check"
+# --- Activated: sbom-cve-check (replaces cve-check, removed in wrynose 6.0) ---
+# Scans package versions against an NVD feed at build time and produces a
+# yocto-format JSON (${IMAGE_LINK_NAME}.sbom-cve-check.yocto.json) compatible
+# with manifest-to-cyclonedx.py and manifest-to-vex.py.
+# Also enables create-spdx (required by sbom-cve-check).
+# Report: tmp/deploy/images/<machine>/${IMAGE_LINK_NAME}.sbom-cve-check.yocto.json
+OE_FRAGMENTS += "core/yocto/sbom-cve-check"
 
 # --- Optional: attack-surface hardening (opt-in; everything below is OFF) ---
 # The "controlled, config-driven" way to decide what a given image can even do

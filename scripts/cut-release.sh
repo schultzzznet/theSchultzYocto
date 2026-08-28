@@ -74,7 +74,7 @@ echo "==== cutting release $VERSION ===="
 # oe-init-build-env is not set -u safe.
 set +u
 # shellcheck disable=SC1091
-source "$WORK_DIR/poky/oe-init-build-env" "$WORK_DIR/build-rauc" >/dev/null 2>&1
+source "$WORK_DIR/openembedded-core/oe-init-build-env" "$WORK_DIR/build-rauc" >/dev/null 2>&1
 set -u
 
 # 3. Build the A/B image + signed bundle.

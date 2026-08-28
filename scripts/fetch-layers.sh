@@ -1,48 +1,52 @@
 #!/usr/bin/env bash
-# Clones poky, meta-raspberrypi, and meta-rauc as siblings of this repo, on
-# a matching release branch, and generates dev signing key material. Run
-# this on the Linux build host -- BitBake needs Linux, this won't do
-# anything useful on macOS.
+# Clones the OE/Yocto layer set as siblings of this repo, on a matching
+# release branch, and generates dev signing key material. Run this on the
+# Linux build host -- BitBake needs Linux, this won't do anything useful on
+# macOS.
 #
 # Usage: ./scripts/fetch-layers.sh [branch]
-#   branch defaults to "scarthgap" (Yocto 5.0 LTS). Verified via
-#   `git ls-remote --heads` that neither poky nor meta-raspberrypi have a
-#   "wrynose" branch yet (2026-07-02), despite the official Yocto Quick
-#   Build doc showing a wrynose clone example for meta-raspberrypi -- docs
-#   were apparently ahead of the actual repo state. Re-check with
-#   `git ls-remote --heads <repo-url>` before switching to wrynose.
+#   branch defaults to "wrynose" (Yocto 6.0 LTS).
 #
-#   meta-rauc tracks the same "scarthgap"-style naming as of 2026-07-03 (it
-#   used a "gh_<release>" scheme earlier in this project's life -- that's
-#   gone now; upstream branch names do change, re-verify rather than trust
-#   old notes). See fetch-rauc-layers.sh for meta-rauc-community, which is
-#   just reference examples, not something this build depends on.
+# Wrynose changed the repo structure: the `poky` convenience bundle (which
+# combined oe-core + bitbake + meta-yocto into one repo) was retired after
+# scarthgap. wrynose ships as three separate repos:
+#   openembedded-core  -- the core recipe set (was poky/meta/)
+#   bitbake            -- the build engine (was poky/bitbake/); branch = 2.18
+#   meta-yocto         -- the Poky distro + BSP layers (was poky/meta-poky/,
+#                         poky/meta-yocto-bsp/)
+# oe-init-build-env still exists, now in openembedded-core/ rather than poky/.
+# bblayers.conf.sample is updated accordingly.
+#
+#   meta-rauc and meta-raspberrypi still use codename branches (wrynose).
 
 set -euo pipefail
 
-BRANCH="${1:-scarthgap}"
+BRANCH="${1:-wrynose}"
+# BitBake uses a version-numbered branch, not a codename.
+BITBAKE_BRANCH="2.18"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 cd "$ROOT_DIR"
 
-if [ -d poky ]; then
-  echo "poky/ already exists, skipping clone"
-else
-  git clone -b "$BRANCH" https://git.yoctoproject.org/poky
-fi
+clone_or_update() {
+  local url="$1" branch="$2" dir
+  dir="$(basename "$url" .git)"
+  if [ -d "$dir" ]; then
+    echo "$dir/ already present -- updating $branch"
+    git -C "$dir" fetch -q origin "$branch"
+    git -C "$dir" checkout -q "$branch"
+    git -C "$dir" merge -q --ff-only "origin/$branch" || echo "  (ff-only failed -- working tree may be ahead)"
+  else
+    git clone -b "$branch" "$url"
+  fi
+}
 
-if [ -d meta-raspberrypi ]; then
-  echo "meta-raspberrypi/ already exists, skipping clone"
-else
-  git clone -b "$BRANCH" https://git.yoctoproject.org/meta-raspberrypi
-fi
-
-if [ -d meta-rauc ]; then
-  echo "meta-rauc/ already exists, skipping clone"
-else
-  git clone -b "$BRANCH" https://github.com/rauc/meta-rauc.git
-fi
+clone_or_update https://git.openembedded.org/openembedded-core "$BRANCH"
+clone_or_update https://git.openembedded.org/bitbake            "$BITBAKE_BRANCH"
+clone_or_update https://git.yoctoproject.org/meta-yocto         "$BRANCH"
+clone_or_update https://git.yoctoproject.org/meta-raspberrypi   "$BRANCH"
+clone_or_update https://github.com/rauc/meta-rauc.git           "$BRANCH"
 
 "$REPO_DIR/scripts/generate-signing-keys.sh"
 
@@ -52,6 +56,6 @@ Layers ready in: $ROOT_DIR
 
 Next steps:
   cd "$ROOT_DIR"
-  TEMPLATECONF="\$PWD/theSchultzYocto/conf/templates/schultz" source poky/oe-init-build-env build
+  TEMPLATECONF="\$PWD/theSchultzYocto/conf/templates/schultz" source openembedded-core/oe-init-build-env build
   bitbake schultz-image-minimal
 EOF

@@ -50,20 +50,10 @@ if [ ! -f "$MANIFEST" ]; then
   exit 1
 fi
 
-# Historical note: originally extracted+converted Yocto's own SPDX output
-# (create-spdx-2.2) via cyclonedx-cli. Abandoned 2026-07-04 -- that SPDX
-# output is a graph of 166+ linked documents (one per recipe/package via
-# externalDocumentRefs), and converting just the top-level document only
-# captures the image itself as a single "package", none of its actual
-# constituent packages. Generating directly from the plain-text .manifest
-# file (name/arch/version per line, exactly what's needed) is simpler and
-# actually gets the full package list into Dependency-Track. See
-# scripts/manifest-to-cyclonedx.py for details. Components carry generic
-# `pkg:generic/...` PURLs (no ecosystem-specific PURL type exists for OE
-# packages), so on their own DT can't match CVEs -- but we also feed in
-# cve-check's per-recipe CPE product table below so each component gets a real
-# CPE and DT's NVD matching actually works.
-CVE_SUMMARY="$WORK_DIR/$BUILD_SUBDIR/tmp/log/cve/cve-summary.json"
+# Wrynose 6.0: cve-check was removed; sbom-cve-check produces a yocto-format
+# JSON in DEPLOY_DIR_IMAGE (same structure as cve-summary.json, so
+# manifest-to-cyclonedx.py and manifest-to-vex.py work unchanged).
+CVE_SUMMARY="$WORK_DIR/$BUILD_SUBDIR/tmp/deploy/images/raspberrypi3-64/${IMAGE_NAME}-raspberrypi3-64.rootfs.sbom-cve-check.yocto.json"
 PKGDATA_DIR="$WORK_DIR/$BUILD_SUBDIR/tmp/pkgdata/raspberrypi3-64/runtime-reverse"
 
 SBOM_CDX="$(mktemp /tmp/schultz-sbom-XXXXXX.cdx.json)"
@@ -87,7 +77,7 @@ if [ -f "$CVE_SUMMARY" ]; then
   # harmless -- the generator just falls back to name/prefix matching.
   python3 "$REPO_DIR/scripts/manifest-to-cyclonedx.py" "$MANIFEST" "$IMAGE_NAME" "$PROJECT_VERSION" "$CVE_SUMMARY" "$PKGDATA_DIR" > "$SBOM_CDX"
 else
-  echo "No cve-summary.json at $CVE_SUMMARY -- uploading with generic PURLs only (no CPEs; enable cve-check for real DT matching)." >&2
+  echo "No sbom-cve-check output at $CVE_SUMMARY -- uploading with generic PURLs only (no CPEs; enable sbom-cve-check for real DT matching)." >&2
   python3 "$REPO_DIR/scripts/manifest-to-cyclonedx.py" "$MANIFEST" "$IMAGE_NAME" "$PROJECT_VERSION" > "$SBOM_CDX"
 fi
 archive_artifact "$SBOM_CDX" sbom.cdx.json
