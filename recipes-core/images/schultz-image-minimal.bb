@@ -4,7 +4,8 @@ learning Yocto/BitBake, not a production image."
 
 require recipes-core/images/core-image-minimal.bb
 
-IMAGE_FEATURES += "ssh-server-openssh debug-tweaks"
+# wrynose: debug-tweaks was split into individual features.
+IMAGE_FEATURES += "ssh-server-openssh allow-empty-password allow-root-login"
 
 # nano/htop would be nice but live in meta-openembedded (meta-oe), which
 # isn't one of our layers -- build failed with "Nothing RPROVIDES 'nano'"

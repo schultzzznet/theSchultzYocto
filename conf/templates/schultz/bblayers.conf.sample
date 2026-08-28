@@ -5,10 +5,13 @@ POKY_BBLAYERS_CONF_VERSION = "2"
 BBPATH = "${TOPDIR}"
 BBFILES ?= ""
 
+# Wrynose: poky was retired. ##OEROOT## now resolves to the openembedded-core/
+# directory. meta-poky and meta-yocto-bsp moved into the separate meta-yocto/
+# repo cloned as a sibling by scripts/fetch-layers.sh.
 BBLAYERS ?= " \
   ##OEROOT##/meta \
-  ##OEROOT##/meta-poky \
-  ##OEROOT##/meta-yocto-bsp \
+  ##OEROOT##/../meta-yocto/meta-poky \
+  ##OEROOT##/../meta-yocto/meta-yocto-bsp \
   ##OEROOT##/../meta-raspberrypi \
   ##OEROOT##/../meta-rauc \
   ##OEROOT##/../theSchultzYocto \
