@@ -8,15 +8,10 @@ remounted read-write. For a fielded device, NOT the learning sandbox. See the \
 
 require recipes-core/images/schultz-image-minimal.bb
 
-# 1. Drop debug-tweaks -- removes the empty root password + passwordless SSH the
-#    learning image ships. IMPORTANT: with debug-tweaks gone and no other
-#    credential, root login is LOCKED (secure, but you can't get in). A real
-#    deployment MUST add auth -- an SSH authorized_keys (preferred) or a hashed
-#    root password. Deliberately not baked in here (committing a key/password
-#    would be worse). Example: ship a small recipe that installs
-#    /home/root/.ssh/authorized_keys and add it via:
-#      # IMAGE_INSTALL:append = " my-authorized-keys"
-IMAGE_FEATURES:remove = "debug-tweaks"
+# 1. Drop debug-tweaks equivalent (wrynose: split into allow-empty-password +
+#    allow-root-login). With both gone root login is LOCKED (secure, but you
+#    can't get in). A real deployment MUST add auth via IMAGE_INSTALL.
+IMAGE_FEATURES:remove = "allow-empty-password allow-root-login"
 
 # 2. Immutable root. read-only-rootfs mounts / read-only and wires up tmpfs for
 #    the few dirs that must be writable at runtime (/var/volatile, etc.).
