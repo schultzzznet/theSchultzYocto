@@ -84,7 +84,7 @@ fi
 #      safe, so relax strict mode just for sourcing it.
 set +u
 # shellcheck disable=SC1091
-source openembedded-core/oe-init-build-env build-rauc
+source poky/oe-init-build-env build-rauc
 set -u
 
 echo "-- bitbake $IMAGE --"

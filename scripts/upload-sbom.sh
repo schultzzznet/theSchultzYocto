@@ -53,7 +53,10 @@ fi
 # Wrynose 6.0: cve-check was removed; sbom-cve-check produces a yocto-format
 # JSON in DEPLOY_DIR_IMAGE (same structure as cve-summary.json, so
 # manifest-to-cyclonedx.py and manifest-to-vex.py work unchanged).
-CVE_SUMMARY="$WORK_DIR/$BUILD_SUBDIR/tmp/deploy/images/raspberrypi3-64/${IMAGE_NAME}-raspberrypi3-64.rootfs.sbom-cve-check.yocto.json"
+# NOTE: build/conf/local.conf is NOT git-managed (only copied from the
+# template when a build dir is first created), so production still runs
+# cve-check, not sbom-cve-check, until it's explicitly switched over.
+CVE_SUMMARY="$WORK_DIR/$BUILD_SUBDIR/tmp/log/cve/cve-summary.json"
 PKGDATA_DIR="$WORK_DIR/$BUILD_SUBDIR/tmp/pkgdata/raspberrypi3-64/runtime-reverse"
 
 SBOM_CDX="$(mktemp /tmp/schultz-sbom-XXXXXX.cdx.json)"
@@ -77,7 +80,7 @@ if [ -f "$CVE_SUMMARY" ]; then
   # harmless -- the generator just falls back to name/prefix matching.
   python3 "$REPO_DIR/scripts/manifest-to-cyclonedx.py" "$MANIFEST" "$IMAGE_NAME" "$PROJECT_VERSION" "$CVE_SUMMARY" "$PKGDATA_DIR" > "$SBOM_CDX"
 else
-  echo "No sbom-cve-check output at $CVE_SUMMARY -- uploading with generic PURLs only (no CPEs; enable sbom-cve-check for real DT matching)." >&2
+  echo "No cve-summary.json at $CVE_SUMMARY -- uploading with generic PURLs only (no CPEs; enable cve-check for real DT matching)." >&2
   python3 "$REPO_DIR/scripts/manifest-to-cyclonedx.py" "$MANIFEST" "$IMAGE_NAME" "$PROJECT_VERSION" > "$SBOM_CDX"
 fi
 archive_artifact "$SBOM_CDX" sbom.cdx.json

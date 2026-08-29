@@ -38,9 +38,9 @@ fi
 #    isn't set -u safe, so relax strict mode just for sourcing it.
 set +u
 if [ ! -f build-rauc/conf/local.conf ]; then
-  TEMPLATECONF="$REPO_DIR/conf/templates/schultz" source openembedded-core/oe-init-build-env build-rauc
+  TEMPLATECONF="$REPO_DIR/conf/templates/schultz" source poky/oe-init-build-env build-rauc
 else
-  source openembedded-core/oe-init-build-env build-rauc
+  source poky/oe-init-build-env build-rauc
 fi
 set -u
 

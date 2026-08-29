@@ -81,29 +81,30 @@ if [ "${SCHULTZ_GIT_PULL:-1}" = "1" ] && [ -d "$REPO_DIR/.git" ]; then
   git -C "$REPO_DIR" pull --ff-only || echo "git pull skipped/failed; using current tree"
 fi
 
-# 1b. Track the Yocto LTS branch. wrynose (6.0) gets CVE backports as point
+# 1b. Track the Yocto LTS branch. scarthgap (5.0) gets CVE backports as point
 #     releases -- without pulling them, the SBOM misses fixes already landed
-#     upstream. Pull ff-only on each layer that tracks the codename branch;
-#     bitbake tracks a version-numbered branch (2.18) and is pulled separately.
-#     meta-rauc-community and meta-lts-mixins carry the bootloader/A-B
-#     integration, so they move deliberately with an on-hardware retest, never
-#     unattended overnight. A failed pull is non-fatal: we build whatever is
-#     checked out. Set SCHULTZ_UPDATE_LTS_LAYERS=0 to freeze the layers.
+#     upstream. build/ is still scarthgap (production hasn't cut over to
+#     wrynose yet -- see scripts/fetch-layers.sh header); pull ff-only on the
+#     layers it actually uses. meta-rauc-community and meta-lts-mixins carry
+#     the bootloader/A-B integration, so they move deliberately with an
+#     on-hardware retest, never unattended overnight. A failed pull is
+#     non-fatal: we build whatever is checked out. Set
+#     SCHULTZ_UPDATE_LTS_LAYERS=0 to freeze the layers.
 if [ "${SCHULTZ_UPDATE_LTS_LAYERS:-1}" = "1" ]; then
-  echo "-- tracking Yocto LTS (wrynose) point-releases --"
-  for _layer in openembedded-core meta-yocto meta-raspberrypi meta-rauc; do
+  echo "-- tracking Yocto LTS (scarthgap) point-releases --"
+  for _layer in poky meta-raspberrypi meta-rauc; do
     _d="$WORK_DIR/$_layer"
     [ -d "$_d/.git" ] || continue
     _head_branch="$(git -C "$_d" rev-parse --abbrev-ref HEAD 2>/dev/null)"
     case "$_head_branch" in
-      wrynose|2.18)
+      scarthgap)
         _before="$(git -C "$_d" rev-parse --short HEAD)"
         git -C "$_d" pull --ff-only >/dev/null 2>&1 || echo "  $_layer: pull skipped/failed"
         _after="$(git -C "$_d" rev-parse --short HEAD)"
         if [ "$_before" != "$_after" ]; then echo "  $_layer: $_before -> $_after (LTS update)"; else echo "  $_layer: $_before (current)"; fi
         ;;
       *)
-        echo "  $_layer: not on wrynose/2.18 (pinned/detached) -- left as-is"
+        echo "  $_layer: not on scarthgap (pinned/detached) -- left as-is"
         ;;
     esac
   done
@@ -173,9 +174,13 @@ fi
 
 # 2. Refresh sbom-cve-check + regenerate the SBOM/VEX inputs. oe-init-build-env
 #    is not set -u safe, so relax strict mode just for sourcing it.
+# NOTE: build/ is still scarthgap -- this MUST stay poky/ until production is
+# actually cut over to wrynose (see scripts/fetch-layers.sh header). Pointing
+# this at openembedded-core/ (wrynose's bitbake 2.18) broke the nightly cron
+# on 2026-08-29: "Could not include required file conf/multiconfig/.conf".
 set +u
 # shellcheck disable=SC1091
-source openembedded-core/oe-init-build-env build
+source poky/oe-init-build-env build
 set -u
 echo "-- bitbake schultz-image-minimal --"
 if ! bitbake schultz-image-minimal; then

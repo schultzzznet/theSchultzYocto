@@ -35,9 +35,9 @@ fi
 # sourcing it.
 set +u
 if [ ! -f build/conf/local.conf ]; then
-  TEMPLATECONF="$REPO_DIR/conf/templates/schultz" source openembedded-core/oe-init-build-env build
+  TEMPLATECONF="$REPO_DIR/conf/templates/schultz" source poky/oe-init-build-env build
 else
-  source openembedded-core/oe-init-build-env build
+  source poky/oe-init-build-env build
 fi
 set -u
 
