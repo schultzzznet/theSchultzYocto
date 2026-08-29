@@ -111,18 +111,17 @@ and strip it down" or "hand-roll a rootfs from scratch":
 
 Yocto ships releases on a rhythm (see the [Releases wiki](https://wiki.yoctoproject.org/wiki/Releases)):
 non-LTS releases roughly every 6 months, LTS releases roughly every 4 years
-with multi-year support tails. We're tracking `scarthgap` (5.0 LTS, supported
-into 2028) — see [first-build.md](first-build.md) for why we ended up there
-instead of the newer `wrynose` (its poky/meta-raspberrypi branches don't
-exist yet, as of this writing — verify with `git ls-remote --heads` before
-assuming a branch is cut).
+with multi-year support tails. `scarthgap` (5.0 LTS, supported into 2028) was
+this project's first pin — see [first-build.md](first-build.md) — and
+`wrynose` (6.0 LTS, supported into 2030) is the migration target described
+below.
 
 Updating means moving **all your layers together** to matching release
-branches — poky, `meta-raspberrypi`, and your own layer's
+branches — the core layer, `meta-raspberrypi`, and your own layer's
 `LAYERSERIES_COMPAT` all need to agree, or BitBake will refuse to parse.
 Practically: read the release's migration notes, bump branches, rebuild, fix
 what breaks (recipe renames, removed classes, changed defaults do happen
-between releases).
+between releases — see "The wrynose migration" below for a real one).
 
 For patching *within* a release rather than jumping releases:
 
@@ -135,9 +134,137 @@ For patching *within* a release rather than jumping releases:
   backport fixes to their LTS branches — `git pull` on those layers
   periodically, not just at major-version-jump time.
 
+## The wrynose migration: where `poky` went, and how this was rebuilt
+
+Yocto 6.0 (`wrynose`) is a genuine structural break from every release before
+it, not just a new codename — worth understanding on its own, because "bump
+the branch name" (which is *all* scarthgap → any-earlier-release ever took)
+stopped working.
+
+### `poky` is retired
+
+Every release through `scarthgap` was fetched as a single convenience repo,
+**`poky`**, which bundled three independent projects into one clone:
+
+| Inside old `poky/` | Actually is | Upstream repo now |
+|---|---|---|
+| `poky/meta/` | the core recipe set | `openembedded-core` |
+| `poky/bitbake/` | the build engine | `bitbake` |
+| `poky/meta-poky/`, `poky/meta-yocto-bsp/` | the reference distro + BSP | `meta-yocto` |
+
+The Yocto Project stopped maintaining that bundle after scarthgap —
+`git.yoctoproject.org/poky`'s `master` branch carries a commit literally
+titled *"The poky repository master branch is no longer being updated"*
+(Nov 2025), and no `wrynose` branch was ever cut there. wrynose ships as the
+three repos above, cloned as **separate siblings**, plus BitBake tracks a
+version number now (`2.18`) instead of a codename. `oe-init-build-env` still
+exists and works the same way — it just now lives in `openembedded-core/`
+instead of `poky/`.
+
+`scripts/fetch-layers.sh` clones all three (plus `meta-raspberrypi` and
+`meta-rauc`, which kept their usual codename-branch convention).
+
+### Recipe-level breaking changes hit in this migration
+
+Concrete things that failed on the first wrynose build attempt, in the order
+BitBake surfaced them:
+
+- **`inherit cve-check` is gone.** Replaced by `sbom-cve-check`
+  (`OE_FRAGMENTS += "core/yocto/sbom-cve-check"`), which analyses the SPDX SBOM
+  `create-spdx` already produces instead of re-scanning at build time. Its
+  output — `<image>.sbom-cve-check.yocto.json` in `DEPLOY_DIR_IMAGE` — uses the
+  *same* `package[].issue[]` shape as the old `cve-summary.json`, so
+  [scripts/manifest-to-cyclonedx.py](../scripts/manifest-to-cyclonedx.py) and
+  [scripts/manifest-to-vex.py](../scripts/manifest-to-vex.py) needed **zero**
+  changes — only the scripts that locate the file did.
+- **`S = "${WORKDIR}"` is a hard parse error now** ("no longer supported") —
+  [schultz-agent's recipe](../recipes-support/schultz-agent/schultz-agent_1.0.bb)
+  used it for a `file://`-only fetch with no real source tree; the fix is
+  `S = "${UNPACKDIR}"`.
+- **`debug-tweaks` (the `IMAGE_FEATURES` bundle) was split** into its
+  constituent features (`allow-empty-password`, `allow-root-login`) — the
+  bundle name itself is no longer valid and BitBake now tells you the whole
+  list of what *is* valid when you get it wrong.
+- **`.wks` kickstart files must live under `files/wic/`** in whichever layer
+  provides them (used to be anywhere BitBake's WKS search path covered).
+  `meta-rauc-community`'s upstream `master` branch (the one that targets
+  wrynose — see below) already conforms; nothing to fix on our side.
+
+### The RAUC A/B layer needed a compatibility check of its own
+
+`meta-rauc-community` has no `wrynose`-named branch — like `meta-yocto`,
+it tracks the *current* release on `master`
+(`LAYERSERIES_COMPAT_meta-rauc-raspberrypi = "wrynose"`, confirmed by reading
+its `layer.conf` before touching anything). Two things worth knowing before
+trusting that:
+
+- Its `master` branch **dropped the `lts-u-boot-mixin` hard dependency** that
+  broke A/B silently the last time this project tried a newer U-Boot on
+  scarthgap (see [rauc-ab-updates.md](rauc-ab-updates.md#still-open) and
+  [TOOLING.md](TOOLING.md#rauc)) — a genuinely different, cleaner
+  `LAYERDEPENDS` this time.
+- But oe-core/wrynose ships **U-Boot 2026.01 natively** — two major versions
+  past the known-good 2024.01 this project ran on scarthgap, and newer still
+  than the 2025.04 that caused the earlier silent failure. Same class of risk,
+  different version, and *not optional* this time (it's wrynose's stock
+  U-Boot, not an opt-in mixin) — which is exactly why this still needs an
+  on-hardware boot + rollback test before it's trusted, not just a green
+  build. See [status.md](status.md) for the current verification state.
+
+### The isolation lesson (learned the hard way, 2026-08-29)
+
+`meta-raspberrypi` and `meta-rauc` are **shared sibling directories** — every
+build directory's `bblayers.conf` points at the *same* `~/meta-raspberrypi`
+and `~/meta-rauc` on disk. Switching those two directories to `wrynose` for
+testing broke the **still-scarthgap production nightly cron** twice in one
+day, because `build/` and `build-rauc/` reference those same paths:
+
+```
+ERROR: Layer raspberrypi is not compatible with the core layer which only
+       supports these series: scarthgap (layer is compatible with wrynose)
+```
+
+and, after fixing that, a second break from shared *scripts* (not
+directories) pointing at the wrong `oe-init-build-env`:
+
+```
+bb.parse.ParseError: ... Could not include required file conf/multiconfig/.conf
+```
+
+(wrynose's BitBake 2.18, sourced via `openembedded-core/oe-init-build-env`,
+parsing scarthgap-era `conf/` files it was never meant to read.)
+
+The fix, and the pattern this project now follows for any two-release-wide
+migration: **while a release is being validated, it gets its own, entirely
+separate clone of every layer it needs** — never share a directory between a
+release that's still in production and one that's still being proven. Every
+migration script now carries a loud warning about this (see the header of
+[scripts/fetch-layers.sh](../scripts/fetch-layers.sh)). Concretely, three
+parallel trees exist on the build host right now:
+
+| Tree | Layers | Purpose |
+|---|---|---|
+| `~/poky`, `~/meta-raspberrypi`, `~/meta-rauc` (scarthgap) | shared, production | `build/` (nightly scan) and `build-rauc/` (nightly A/B bundle) |
+| `~/openembedded-core`, `~/bitbake`, `~/meta-yocto`, `~/wrynose-layers/{meta-raspberrypi,meta-rauc}` (wrynose) | isolated | `build-wrynose/` — plain image, proven (5080/5080 tasks, SBOM/VEX verified end-to-end) |
+| `~/wrynose-layers/meta-rauc-community` (wrynose-compatible `master`) | isolated | `build-rauc-wrynose/` — A/B image + signed bundle, hardware verification in progress |
+
+### Current status
+
+The **base image** migration is done and proven: a clean 5080-task build,
+CVE/SBOM/VEX pipeline verified component-for-component against the scarthgap
+output (81 components, 79 with CPE either way). The **A/B/RAUC** migration is
+still being verified on real hardware — U-Boot 2026.01 is an unknown
+quantity until it's watched boot over serial and put through a
+mark-bad/mark-active rollback trace, exactly as was done (and once failed!)
+for the scarthgap U-Boot bump. **Production stays on scarthgap** — nightly
+`build/` and `build-rauc/` — until that hardware verification passes; nothing
+about the migration touches them. See [status.md](status.md) and
+[GAPS.md](GAPS.md) for the up-to-date verification state.
+
 ## Safe and secure, concretely
 
-- **`inherit cve-check`** — a standard OE-Core class that cross-references
+- **`inherit cve-check`** (scarthgap) / **`sbom-cve-check`** (wrynose, see
+  above) — a standard OE-Core class that cross-references
   every recipe's version against the NVD CVE database and reports known
   vulnerabilities per-package at build time (`tmp/deploy/cve/` reports).
   This is the single most useful "am I shipping something known-bad" check

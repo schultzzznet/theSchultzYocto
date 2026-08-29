@@ -1,16 +1,20 @@
 # theSchultzYocto — status at a glance
 
 A living snapshot of what's built, what's **verified on real hardware**, and
-what's deliberately out of reach. Last updated **2026-08-19** (re-verified the
-layer pins on hardware: upstream's newer RAUC/RPi layer + U-Boot 2025.04 breaks
-A/B *silently*, so the scarthgap pins stay — see "Updates &amp; boot" below).
+what's deliberately out of reach. Last updated **2026-08-29** (wrynose (6.0 LTS)
+migration: base image proven on the build host, isolated from the still-scarthgap
+production pipeline; RAUC A/B hardware verification in progress — see
+[yocto-concepts.md](yocto-concepts.md#the-wrynose-migration-where-poky-went-and-how-this-was-rebuilt)
+for the full story).
 
 **Latest release:** `2026.07.1` (codename `scarthgap`) — Ubuntu-style CalVer,
 built on Yocto 5.0.19 LTS, pinned by git tag `v2026.07.1` and its
 `PROVENANCE.txt`. The device **self-reports** it via `/etc/os-release`
 (`IMAGE_ID=theschultzyocto`, `IMAGE_VERSION=2026.07.1`), and it was delivered to
 the running Pi **over the air** (`2026.07.0` → `2026.07.1`, slot A → B) with no
-re-flash. The `rolling` line tracks scarthgap point-releases nightly.
+re-flash. The `rolling` line tracks scarthgap point-releases nightly. **This is
+still what ships** — the wrynose work below runs in an isolated tree and has not
+replaced it.
 
 **Legend:** ✅ verified on hardware · 🟢 built &amp; wired (on-hardware proof
 pending) · ❌ not possible here (with reason)
@@ -27,6 +31,8 @@ pending) · ❌ not possible here (with reason)
 | Shared source/sstate mirror (Nexus) | ✅ | `SOURCE_MIRROR_URL` + `SSTATE_MIRRORS` were set on 2026-07-03 but pointed at **empty** repos until `populate-nexus-mirror.sh` (2026-08-12) started filling them; needed `BB_GENERATE_MIRROR_TARBALLS` too, or the 38 git clones stay unmirrorable. Both halves proven by restore, not just by upload |
 | Shared hash-equivalence server | ✅ | `bitbake-hashserv` systemd unit on the build host, db outside `build/`, seeded from the local one; without it mirrored sstate resolves to different unihashes and never matches |
 | Scoped Nexus write account | ✅ | `yocto-ci`: `ADD/EDIT/READ/BROWSE` on the three raw repos only — verified 201 in-scope, 403 out-of-scope, 403 on the admin API |
+| Yocto 6.0 (wrynose) migration — base image | ✅ | `openembedded-core`+`bitbake 2.18`+`meta-yocto` replace the retired `poky` bundle; clean 5080-task build, `sbom-cve-check` → SBOM/VEX pipeline verified (81 components, 79 CPE) against the same scarthgap output shape. Isolated in `~/wrynose-layers/` + `build-wrynose/` — does not touch production |
+| Yocto 6.0 (wrynose) migration — RAUC A/B | 🟢 | image + signed bundle building in an isolated `build-rauc-wrynose/` tree; U-Boot jumps to 2026.01 (oe-core's native version) — same class of unverified risk as the scarthgap U-Boot 2025.04 regression below, so this needs the same on-hardware boot + rollback proof before it's trusted |
 
 ## Supply-chain security
 
