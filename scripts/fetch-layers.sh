@@ -18,6 +18,18 @@
 # bblayers.conf.sample is updated accordingly.
 #
 #   meta-rauc and meta-raspberrypi still use codename branches (wrynose).
+#
+# DANGER -- meta-rauc/meta-raspberrypi are SHARED sibling directories. If a
+# scarthgap production build (build/, build-rauc/) is still running from the
+# SAME siblings, running this with branch=wrynose switches those directories
+# out from under it -- confirmed 2026-08-29: this broke the nightly cron with
+# "Layer raspberrypi is not compatible with the core layer which only
+# supports these series: scarthgap". While two releases are in parallel use,
+# either (a) finish cutting scarthgap over first (retire build/, build-rauc/,
+# see docs/rauc-ab-updates.md's migration notes), or (b) clone a second,
+# differently-named copy for whichever release is NOT production and repoint
+# that build dir's conf/bblayers.conf at it -- do not let both trees share
+# meta-raspberrypi/meta-rauc while one of them is still live.
 
 set -euo pipefail
 
