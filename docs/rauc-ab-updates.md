@@ -98,7 +98,7 @@ flowchart LR
   ```
   It git-pulls, builds the A/B image + signed bundle, verifies `rauc info` matches
   the version, snapshots the SBOM+VEX to Dependency-Track, archives
-  bundle+image+SBOM+VEX+`PROVENANCE.txt` under `build-rauc/releases/<version>/`,
+  bundle+image+SBOM+VEX+`PROVENANCE.txt` under `<rauc build dir>/releases/<version>/`,
   **publishes them to the Nexus raw repo**, and tags `v<version>`.
 - **Deploy it over the air** —
   ```sh
@@ -262,21 +262,23 @@ initramfs + the verity setup); the natural next tier once boot is proven.
 
 ## 1. Build it
 
-On the build host (this uses a **separate `build-rauc/`** dir so it never
-disturbs the normal `build/` the daily scan uses):
+On the build host (this uses a **separate RAUC build dir** so it never
+disturbs the normal one the daily scan uses — both names come from
+[scripts/release-profile.sh](../scripts/release-profile.sh), currently
+`build-rauc-wrynose/` and `build-wrynose/`):
 
 ```sh
 ./theSchultzYocto/scripts/setup-rauc-build.sh   # adds the rauc layers + U-Boot/systemd/dual-wic config
-cd build-rauc
-bitbake schultz-image-minimal   # → tmp/deploy/images/raspberrypi3-64/schultz-image-minimal-*.wic.bz2
+cd build-rauc-wrynose
+bitbake schultz-image-minimal   # → tmp/deploy/images/raspberrypi3-64/schultz-image-minimal-*.wic.gz
 bitbake schultz-bundle          # → schultz-bundle-raspberrypi3-64.raucb (signed update)
 ```
 
 What the setup script layered on top of the normal config:
 `RPI_USE_U_BOOT=1`, `ENABLE_UART=1`, `INIT_MANAGER=systemd`,
-`WKS_FILE=sdimage-dual-raspberrypi.wks.in`, and `IMAGE_FSTYPES += ext4`. (This
-scarthgap-era reference boots a shared kernel from `/boot`; only the rootfs is
-A/B.) The A/B slots + our signing keyring come
+`WKS_FILE=sdimage-dual-raspberrypi.wks.in`, and `IMAGE_FSTYPES += ext4`. (The
+reference boots a shared kernel from `/boot`; only the rootfs is A/B.) The A/B
+slots + our signing keyring come
 from [recipes-core/rauc/](../recipes-core/rauc/); the bundle's `compatible`
 string is pinned in [schultz-bundle.bb](../recipes-core/images/schultz-bundle.bb)
 to match `system.conf` (a mismatch is the #1 reason `rauc install` refuses a
@@ -287,15 +289,15 @@ hand. [build-rauc-bundle.sh](../scripts/build-rauc-bundle.sh) runs the whole
 image → bundle → **verify** → archive cycle, and the nightly
 [daily-security-scan.sh](../scripts/daily-security-scan.sh) chains it as its
 final stage (under the same one-build-at-a-time lock). So every recipe or CVE
-change that refreshes `build/` also refreshes the flashable A/B image **and** the
-signed bundle in `build-rauc/`, automatically. Each run verifies the bundle's
+change that refreshes the rolling image also refreshes the flashable A/B image
+**and** the signed bundle, automatically. Each run verifies the bundle's
 signature + `compatible` string *before* archiving it under a UTC timestamp in
-`build-rauc/rauc-archive/` and repointing the stable `latest.*` symlinks — so
-grabbing the freshest card never means chasing a timestamp:
+`<rauc build dir>/rauc-archive/` and repointing the stable `latest.*` symlinks —
+so grabbing the freshest card never means chasing a timestamp:
 
 ```sh
-scp <build-host>:build-rauc/rauc-archive/latest.wic.gz .   # newest A/B image
-scp <build-host>:build-rauc/rauc-archive/latest.raucb  .   # newest signed bundle
+scp <build-host>:build-rauc-wrynose/rauc-archive/latest.wic.gz .   # newest A/B image
+scp <build-host>:build-rauc-wrynose/rauc-archive/latest.raucb  .   # newest signed bundle
 ```
 
 Run it standalone any time with `./theSchultzYocto/scripts/build-rauc-bundle.sh`.

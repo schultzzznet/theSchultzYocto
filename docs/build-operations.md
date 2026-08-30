@@ -8,11 +8,14 @@ in a real incident hit while building this project (2026-07-02).
 ## Checking on a detached build
 
 `remote-build.sh` launches bitbake via `setsid nohup ... & disown`, logged
-to `~/build/schultz-build.log` (a sibling of `theSchultzYocto/`, `poky/`,
-etc — **not** inside the git repo). From the Mac:
+to `<build dir>/schultz-build.log` (a sibling of `theSchultzYocto/` — **not**
+inside the git repo). The build dir comes from
+[scripts/release-profile.sh](../scripts/release-profile.sh): `~/build-wrynose`
+for the current release, `~/build` if you run with
+`SCHULTZ_RELEASE=scarthgap`. From the Mac:
 
 ```sh
-ssh rpi5g16nvme 'tail -n 60 ~/build/schultz-build.log; echo ---; pgrep -af bitbake-worker | wc -l'
+ssh rpi5g16nvme 'tail -n 60 ~/build-wrynose/schultz-build.log; echo ---; pgrep -af bitbake-worker | wc -l'
 ```
 
 A healthy build shows a steady stream of `NOTE: recipe ...: task ...:
@@ -90,7 +93,7 @@ ssh rpi5g16nvme 'kill <pids...>'
 
 # 2. Wipe the untrustworthy state, keep downloads/ (checksum-verified by
 #    the fetcher regardless, no benefit to re-fetching ~GBs of source)
-ssh rpi5g16nvme 'rm -rf ~/build/tmp ~/build/sstate-cache'
+ssh rpi5g16nvme 'rm -rf ~/build-wrynose/tmp ~/build-wrynose/sstate-cache'
 
 # 3. Relaunch -- safe to re-run, see remote-build.sh
 ssh rpi5g16nvme 'cd theSchultzYocto && ./scripts/remote-build.sh'

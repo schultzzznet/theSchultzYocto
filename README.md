@@ -117,7 +117,7 @@ theSchultzYocto/                  <- this repo == the "schultz" layer
 ├── recipes-support/
 │   └── schultz-agent/            <- opt-in device agent for the fleet dashboard
 ├── scripts/
-│   ├── fetch-layers.sh           <- clones poky + meta-raspberrypi as siblings
+│   ├── fetch-layers.sh           <- clones oe-core + bitbake + meta-yocto + BSP layers
 │   ├── sync-to-host.sh           <- git-based sync to the build host (no scp/rsync)
 │   ├── remote-build.sh           <- runs ON the build host: bootstrap + launch build
 │   ├── upload-sbom.sh            <- push CycloneDX SBOM + VEX to Dependency-Track
@@ -145,11 +145,20 @@ On the build machine, the full working layout ends up as:
 
 ```
 <workdir>/
-├── poky/               <- git clone of Poky (oe-core + reference distro)
-├── meta-raspberrypi/   <- Raspberry Pi BSP layer
-├── theSchultzYocto/    <- this repo
-└── build/              <- created by oe-init-build-env, not committed
+├── openembedded-core/   <- oe-core (was poky/meta); provides oe-init-build-env
+├── bitbake/             <- the build engine (branch 2.18); left poky/ in 6.0
+├── meta-yocto/          <- the Poky distro + BSP layers (was poky/meta-poky)
+├── wrynose-layers/      <- this release's BSP + RAUC layers, never shared
+│   ├── meta-raspberrypi/
+│   ├── meta-rauc/
+│   └── meta-rauc-community/
+├── theSchultzYocto/     <- this repo
+├── build-wrynose/       <- created by oe-init-build-env, not committed
+└── build-rauc-wrynose/  <- the A/B RAUC image + signed bundle
 ```
+
+The retained scarthgap tree (`poky/`, `meta-raspberrypi/`, `meta-rauc/`,
+`build/`, `build-rauc/`) sits alongside it as a rollback — see below.
 
 ## Quick start
 
@@ -165,40 +174,61 @@ This pushes the repo to `rpi5g16nvme` via git, then bootstraps and launches
 disconnects). Follow progress with:
 
 ```sh
-ssh rpi5g16nvme 'tail -f build/schultz-build.log'
+ssh rpi5g16nvme 'tail -f build-wrynose/schultz-build.log'
 ```
 
 Full walkthrough, including flashing the SD card, in
 [docs/first-build.md](docs/first-build.md).
 
-## Yocto release: why `scarthgap`, and when to move
+## Yocto release: `wrynose`, and how to roll back
 
-This project pins **`scarthgap` (Yocto 5.0 LTS)** across poky, `meta-raspberrypi`,
-and `meta-rauc` — see [scripts/fetch-layers.sh](scripts/fetch-layers.sh) and
-[scripts/fetch-rauc-layers.sh](scripts/fetch-rauc-layers.sh). It's deliberately
-*not* the newest Yocto LTS (**`wrynose` / 6.0**); the bump is ready to happen but
-is no longer a one-line branch swap — it's a porting project:
+This project builds on **`wrynose` (Yocto 6.0.3 LTS)**, cut over from
+`scarthgap` (5.0 LTS) on **30 August 2026** once the RAUC A/B stack was proven
+on real hardware.
 
-- **`poky` is discontinued as a convenience bundle.** The `git.yoctoproject.org/poky`
-  repo's `master` branch was frozen in November 2025 ("no longer being updated");
-  wrynose shipped April 2026 as separate `oe-core` + `bitbake` repos. There will be
-  no `poky/wrynose` branch; our `fetch-layers.sh` approach needs rethinking.
-- **`inherit cve-check` is removed in 6.0**, replaced by `sbom-cve-check`. Our CVE
-  pipeline — `local.conf`, the nightly scan, `manifest-to-cyclonedx.py`, and the
-  audit docs — all depend on it. This needs a real porting effort.
-- SPDX 2.2 removed (use SPDX 3); `.wks` files must move to `files/wic/`.
+Which release the pipeline builds is a single variable in
+[scripts/release-profile.sh](scripts/release-profile.sh):
 
-So scarthgap (5.0.19, LTS until April 2028) remains the right pin for now.
-The wrynose migration is tracked in [docs/GAPS.md](docs/GAPS.md).
+```sh
+SCHULTZ_RELEASE="${SCHULTZ_RELEASE:-wrynose}"
+```
 
-**The move to make later:** understand the new `oe-core` + `bitbake` direct setup
-(replacing poky), port the CVE pipeline from `cve-check` to `sbom-cve-check`, then
-bump. The BSP (`meta-raspberrypi`) and RAUC layers already have `wrynose` branches.
+Every script derives its `oe-init-build-env`, build directories, layer paths,
+`bitbake-hashserv` binary and CVE-report path from it, so **rolling back is one
+line and needs no rebuild** — the scarthgap tree is still on disk:
 
-**How you'll know it's time — Renovate won't tell you.** The catch isn't that
-the releases lack numbers — they have them (scarthgap = 5.0, wrynose = 6.0, and
-6.0 > 5.0 is trivially orderable). It's that the layers are tracked by git
-*branch name* (`scarthgap`), and the number↔codename mapping lives on the Yocto
+```sh
+SCHULTZ_RELEASE=scarthgap ./scripts/daily-security-scan.sh
+```
+
+That indirection exists for a reason. Those paths used to be hardcoded in about
+thirteen places across eight scripts, and a *partial* edit during the migration
+broke the nightly cron twice in one day.
+
+**What the bump actually cost** — it was not a branch swap:
+
+- **`poky` is discontinued as a convenience bundle.** Its `master` was frozen in
+  November 2025 and no `poky/wrynose` branch was ever cut. Wrynose ships as
+  separate `openembedded-core` + `bitbake` (branch `2.18`) + `meta-yocto` repos.
+- **`inherit cve-check` is removed in 6.0**, replaced by the `sbom-cve-check`
+  fragment. Both emit the same `package[].issue[]` shape, so
+  `manifest-to-cyclonedx.py` and `manifest-to-vex.py` needed no changes — only
+  the code that *locates* the report did.
+- `S = "${WORKDIR}"` is a hard parse error; recipes need `S = "${UNPACKDIR}"`.
+- `IMAGE_FEATURES += "debug-tweaks"` split into three features, and missing one
+  of them (`empty-root-password`) makes root login impossible everywhere.
+- U-Boot jumps to **2026.01**. That was the real risk — a previous U-Boot bump
+  silently broke A/B while userspace still reported healthy — so it was proven
+  on hardware with a full `A → B → A` rollback before the cutover.
+
+Scarthgap remains supported upstream until April 2028, which is why it's kept
+rather than deleted. Full story:
+[docs/yocto-concepts.md](docs/yocto-concepts.md#the-wrynose-migration-where-poky-went-and-how-this-was-rebuilt).
+
+**How you'll know the next one is due — Renovate won't tell you.** The catch
+isn't that the releases lack numbers — they have them (scarthgap = 5.0,
+wrynose = 6.0, and 6.0 > 5.0 is trivially orderable). It's that the layers are
+tracked by git *branch name*, and the number↔codename mapping lives on the Yocto
 wiki, **not in the git refs Renovate reads**: `meta-raspberrypi`'s branches are
 bare codenames (`scarthgap`, `styhead`, `walnascar`, `whinlatter`), none
 containing a "5.0"/"6.0" for a version-sorter to compare. Subscribe to

@@ -1,21 +1,27 @@
 # theSchultzYocto — status at a glance
 
 A living snapshot of what's built, what's **verified on real hardware**, and
-what's deliberately out of reach. Last updated **2026-08-30** (wrynose (6.0 LTS)
-migration: base image *and* the RAUC A/B stack now proven — including a full
-`A → B → A` rollback on the Pi 3 B+ under U-Boot 2026.01 — still isolated from
-the production pipeline, which remains on scarthgap; see
+what's deliberately out of reach. Last updated **2026-08-30** — the day the
+wrynose (6.0.3 LTS) migration finished: the RAUC A/B stack was proven on the Pi
+3 B+ (a full `A → B → A` rollback under U-Boot 2026.01), and **production was
+cut over from scarthgap**. See
 [yocto-concepts.md](yocto-concepts.md#the-wrynose-migration-where-poky-went-and-how-this-was-rebuilt)
-for the full story).
+for the full story.
 
-**Latest release:** `2026.07.1` (codename `scarthgap`) — Ubuntu-style CalVer,
-built on Yocto 5.0.19 LTS, pinned by git tag `v2026.07.1` and its
-`PROVENANCE.txt`. The device **self-reports** it via `/etc/os-release`
-(`IMAGE_ID=theschultzyocto`, `IMAGE_VERSION=2026.07.1`), and it was delivered to
-the running Pi **over the air** (`2026.07.0` → `2026.07.1`, slot A → B) with no
-re-flash. The `rolling` line tracks scarthgap point-releases nightly. **This is
-still what ships** — the wrynose work below runs in an isolated tree and has not
-replaced it.
+**Which release the pipeline builds** is now a single variable,
+`SCHULTZ_RELEASE` in [scripts/release-profile.sh](../scripts/release-profile.sh)
+(`wrynose`). Every script resolves its `oe-init-build-env`, build dirs, layer
+paths and CVE-report path from it, so a rollback is one line and needs no
+rebuild — the scarthgap tree is still on disk and still buildable with
+`SCHULTZ_RELEASE=scarthgap`.
+
+**Latest release:** `2026.07.1` — Ubuntu-style CalVer, pinned by git tag
+`v2026.07.1` and its `PROVENANCE.txt`. The device **self-reports** it via
+`/etc/os-release` (`IMAGE_ID=theschultzyocto`, `IMAGE_VERSION=2026.07.1`), and it
+was delivered to the running Pi **over the air** (`2026.07.0` → `2026.07.1`,
+slot A → B) with no re-flash. It was cut on scarthgap (Yocto 5.0.19); the next
+cut will be the first on wrynose. The `rolling` line now tracks wrynose
+point-releases nightly.
 
 **Legend:** ✅ verified on hardware · 🟢 built &amp; wired (on-hardware proof
 pending) · ❌ not possible here (with reason)
@@ -24,7 +30,7 @@ pending) · ❌ not possible here (with reason)
 
 | Capability | Status | Notes |
 |---|---|---|
-| Custom minimal Yocto image | ✅ | `schultz-image-minimal`, scarthgap (5.0 LTS), `raspberrypi3-64` |
+| Custom minimal Yocto image | ✅ | `schultz-image-minimal` on `raspberrypi3-64`; wrynose (6.0.3 LTS) since the 2026-08-30 cutover, originally proven on scarthgap (5.0 LTS) which still builds via `SCHULTZ_RELEASE=scarthgap` |
 | Boots on a real Pi 3 B+ | ✅ | first boot 2026-07-05 |
 | Serial console | ✅ | `enable_uart=1` + `console=ttyS0,115200`, over the [ESP32 WiFi bridge](../tools/esp32-serial-bridge/) |
 | Networking (eth0 DHCP + SSH) | ✅ | reachable + `ssh root@…`; note: Pi 3 B+ `lan78xx` inits late, so on the sysvinit image re-run `udhcpc -i eth0` after reboot (the systemd RAUC image handles it) |

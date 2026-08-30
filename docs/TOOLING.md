@@ -40,7 +40,7 @@ supply-chain pipeline, the hardware, and the supporting infrastructure.
 
 | Status | Tool | Why this / not this |
 |---|---|---|
-| **In use** | **Yocto Project / OpenEmbedded** (`scarthgap` 5.0 LTS) | The industry standard for reproducible custom embedded Linux: bit-for-bit reproducibility, cross-compilation by default, a 20-year layer ecosystem, mandatory license visibility per recipe, and `inherit cve-check` as a built-in supply-chain gate. Skills and layer investments transfer directly to automotive, networking, and IoT product work. |
+| **In use** | **Yocto Project / OpenEmbedded** (`wrynose` 6.0 LTS) | The industry standard for reproducible custom embedded Linux: bit-for-bit reproducibility, cross-compilation by default, a 20-year layer ecosystem, mandatory license visibility per recipe, and a built-in CVE scan as a supply-chain gate. Skills and layer investments transfer directly to automotive, networking, and IoT product work. Ran on `scarthgap` 5.0 LTS until the 2026-08-30 cutover; that tree is kept as a one-variable rollback. |
 | Alternative | **Buildroot** | Simpler (Kconfig/Makefile, no layer concept), genuinely faster to get a first working image, smaller community. Rejected because its layering story is weaker — customisations live in-tree or as patches rather than as clean overlay layers — and Yocto's `sstate` caching and `devtool` tooling are materially better for a project you maintain over years. |
 | Alternative | **Debian / Raspberry Pi OS (minimised)** | Fast start, familiar tooling, huge package mirror. Rejected because "strip it down" gives you a diet general-purpose distro rather than a purpose-built minimal image: something always sneaks back in via a dependency, the attack surface is harder to reason about, and the output is not reproducible at the bit level. |
 | Alternative | **Alpine Linux / BusyBox direct** | Genuinely tiny and auditable, but entirely hand-rolled — no recipe ecosystem, no BSP layers, no cve-check integration. The effort to match what Yocto gives you for free exceeds the startup cost of learning Yocto. |
@@ -53,16 +53,23 @@ layers of metadata (recipes, classes, config) to assemble *your* custom Linux.
 The output is a reproducible root-filesystem image for a specific machine, built
 from a dependency graph of a few thousand tasks.
 
-**Parts we use** — `inherit cve-check` on every build (cross-references all
-installed packages against the NVD and emits `tmp/deploy/cve/` reports);
-`DISTRO_FEATURES` to explicitly gate network capabilities; the `sstate-cache`
-for incremental rebuilds; the `devtool` loop for iterating on a single recipe
-without rebuilding the world; `IMAGE_INSTALL` as the explicit, auditable
-package list; a separate `build-rauc/` directory for the A/B RAUC image and
+**Parts we use** — the built-in CVE scan on every build (`sbom-cve-check` on
+wrynose, `cve-check` on scarthgap — it cross-references all installed packages
+against the NVD); `DISTRO_FEATURES` to explicitly gate network capabilities; the
+`sstate-cache` for incremental rebuilds; the `devtool` loop for iterating on a
+single recipe without rebuilding the world; `IMAGE_INSTALL` as the explicit,
+auditable package list; a separate RAUC build directory for the A/B image and
 signed bundle (so the nightly security scan and the A/B build never contend
-on the same tmp/); and a nightly `git pull --ff-only` on the three LTS layers
-(`poky`, `meta-raspberrypi`, `meta-rauc`) to track scarthgap point-releases
-automatically.
+on the same tmp/); and a nightly `git pull --ff-only` on the LTS layers to track
+point-releases automatically.
+
+**Which release is built** is one variable, `SCHULTZ_RELEASE` in
+[scripts/release-profile.sh](../scripts/release-profile.sh). Every script derives
+its `oe-init-build-env`, build directories, layer paths, hashserv binary and
+CVE-report path from it. That exists because those values were previously
+hardcoded in ~13 places, and a partial edit during the wrynose migration broke
+the nightly cron twice; now `SCHULTZ_RELEASE=scarthgap ./scripts/...` is a
+complete, tested rollback.
 
 **Parts we deliberately don't** — `meta-openembedded` (the extended package
 catalogue) is not a layer. Every package you add is a package you maintain and
@@ -379,13 +386,17 @@ over it would take hours with no error correction. SD card flashing is
 running the nightly `daily-security-scan.sh` cron at 03:30 local.
 
 **Parts we use** — the build tree lives as siblings outside the git repo
-(`~/poky`, `~/meta-raspberrypi`, `~/meta-rauc`, `~/theSchultzYocto`,
-`~/build`, `~/build-rauc`); `scripts/sync-to-host.sh` pushes the repo via git
+(`~/openembedded-core`, `~/bitbake`, `~/meta-yocto`, `~/wrynose-layers/*`,
+`~/theSchultzYocto`, `~/build-wrynose`, `~/build-rauc-wrynose`, plus the retained
+scarthgap set `~/poky`, `~/meta-raspberrypi`, `~/meta-rauc`, `~/build`,
+`~/build-rauc`); `scripts/sync-to-host.sh` pushes the repo via git
 (`receive.denyCurrentBranch=updateInstead`) so nothing is ever scp'd; a flock
-on `~/build/.security-scan.lock` serialises the nightly scan and any manual
-build so they never run simultaneously; `bitbake-hashserv` as a systemd unit
-at `localhost:8686` with its database at `~/hashserv/hashserv.db` (outside
-`build/` so a `tmp/` wipe does not strand the hash-equivalence mappings).
+on `~/.schultz-build.lock` serialises the nightly scan and any manual
+build so they never run simultaneously — it is deliberately *release-independent*
+so a wrynose and a scarthgap build can't both start on the 4-core host;
+`bitbake-hashserv` as a systemd unit at `localhost:8686` with its database at
+`~/hashserv/hashserv.db` (outside any build dir so a `tmp/` wipe does not strand
+the hash-equivalence mappings).
 
 **Parts we deliberately don't** — `~/build/conf/local.conf` is **not
 git-managed**. It is a copy of the template made once when the build dir was

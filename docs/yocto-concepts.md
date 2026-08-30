@@ -207,17 +207,17 @@ trusting that:
   past the known-good 2024.01 this project ran on scarthgap, and newer still
   than the 2025.04 that caused the earlier silent failure. Same class of risk,
   different version, and *not optional* this time (it's wrynose's stock
-  U-Boot, not an opt-in mixin) — which is exactly why this still needs an
-  on-hardware boot + rollback test before it's trusted, not just a green
-  build. See [status.md](status.md) for the current verification state.
+  U-Boot, not an opt-in mixin) — which is exactly why it got an on-hardware
+  boot + rollback test rather than being trusted on a green build. It passed;
+  see *Current status* below.
 
 ### The isolation lesson (learned the hard way, 2026-08-29)
 
-`meta-raspberrypi` and `meta-rauc` are **shared sibling directories** — every
-build directory's `bblayers.conf` points at the *same* `~/meta-raspberrypi`
+`meta-raspberrypi` and `meta-rauc` used to be **shared sibling directories** —
+every build directory's `bblayers.conf` pointed at the *same* `~/meta-raspberrypi`
 and `~/meta-rauc` on disk. Switching those two directories to `wrynose` for
-testing broke the **still-scarthgap production nightly cron** twice in one
-day, because `build/` and `build-rauc/` reference those same paths:
+testing broke the then-scarthgap production nightly cron twice in one day,
+because `build/` and `build-rauc/` reference those same paths:
 
 ```
 ERROR: Layer raspberrypi is not compatible with the core layer which only
@@ -244,13 +244,43 @@ parallel trees exist on the build host right now:
 
 | Tree | Layers | Purpose |
 |---|---|---|
-| `~/poky`, `~/meta-raspberrypi`, `~/meta-rauc` (scarthgap) | shared, production | `build/` (nightly scan) and `build-rauc/` (nightly A/B bundle) |
-| `~/openembedded-core`, `~/bitbake`, `~/meta-yocto`, `~/wrynose-layers/{meta-raspberrypi,meta-rauc}` (wrynose) | isolated | `build-wrynose/` — plain image, proven (5080/5080 tasks, SBOM/VEX verified end-to-end) |
-| `~/wrynose-layers/meta-rauc-community` (wrynose-compatible `master`) | isolated | `build-rauc-wrynose/` — A/B image + signed bundle, verified on hardware 2026-08-30 |
+| `~/openembedded-core`, `~/bitbake`, `~/meta-yocto`, `~/wrynose-layers/*` (wrynose) | **production** | `build-wrynose/` (nightly scan) and `build-rauc-wrynose/` (nightly A/B bundle) |
+| `~/poky`, `~/meta-raspberrypi`, `~/meta-rauc` (scarthgap) | kept as a rollback | `build/` and `build-rauc/` — still buildable with `SCHULTZ_RELEASE=scarthgap`, still supported upstream to April 2028 |
+
+After the cutover the roles swapped, but the rule didn't: **the two series never
+share a layer directory.** That is why the wrynose BSP layers live under
+`~/wrynose-layers/` rather than as top-level siblings, and why
+`scripts/fetch-layers.sh` clones into the active release's layer directory
+instead of the shared sibling it used to clobber.
+
+### One variable picks the release
+
+The cutover also removed the thing that made it dangerous. `poky/`, `build`,
+`build-rauc` and the CVE-report path used to be hardcoded in about thirteen
+places across eight scripts, so migrating meant editing them all consistently
+— and a *partial* edit is precisely what broke the cron. They now come from
+[scripts/release-profile.sh](../scripts/release-profile.sh):
+
+```sh
+SCHULTZ_RELEASE="${SCHULTZ_RELEASE:-wrynose}"
+```
+
+Everything else is derived from it: the `oe-init-build-env` to source, both
+build directories, the distro conf to read `DISTRO_VERSION` from, the
+`bitbake-hashserv` binary (bitbake left `poky/` in wrynose), the layer
+directory, `meta-rauc-community`'s revision, which layers to ff-only pull and
+the branch each must be on, the provenance layer list, and the CVE report path.
+Pairing one release's `oe-init-build-env` with another's build dir is now
+impossible by construction, and rolling back is one line:
+
+```sh
+SCHULTZ_RELEASE=scarthgap ./scripts/daily-security-scan.sh
+```
 
 ### Current status
 
-Both halves are done and proven on real hardware.
+Both halves are done and proven on real hardware, and **production was cut over
+on 2026-08-30**.
 
 The **base image** migration: a clean 5080-task build, CVE/SBOM/VEX pipeline
 verified component-for-component against the scarthgap output (81 components,
@@ -280,9 +310,10 @@ Two genuine bugs surfaced on the way there, both worth remembering:
   `/etc/shadow` — so serial *and* SSH both reject a login that no password can
   satisfy, even though `allow-empty-password` and `allow-root-login` are set.
 
-**Production still stays on scarthgap** — nightly `build/` and `build-rauc/`,
-and every production-shared script still points at `poky/`. The remaining step
-is a deliberate cutover decision, not a technical unknown. See
+**Production now runs on wrynose** — nightly `build-wrynose/` and
+`build-rauc-wrynose/`. The scarthgap tree is deliberately kept, not deleted: it
+is supported upstream until April 2028 and remains one environment variable
+away, which is what makes this cutover cheap to undo. See
 [status.md](status.md) and [GAPS.md](GAPS.md) for the up-to-date verification
 state.
 
