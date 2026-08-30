@@ -1,9 +1,10 @@
 # theSchultzYocto — status at a glance
 
 A living snapshot of what's built, what's **verified on real hardware**, and
-what's deliberately out of reach. Last updated **2026-08-29** (wrynose (6.0 LTS)
-migration: base image proven on the build host, isolated from the still-scarthgap
-production pipeline; RAUC A/B hardware verification in progress — see
+what's deliberately out of reach. Last updated **2026-08-30** (wrynose (6.0 LTS)
+migration: base image *and* the RAUC A/B stack now proven — including a full
+`A → B → A` rollback on the Pi 3 B+ under U-Boot 2026.01 — still isolated from
+the production pipeline, which remains on scarthgap; see
 [yocto-concepts.md](yocto-concepts.md#the-wrynose-migration-where-poky-went-and-how-this-was-rebuilt)
 for the full story).
 
@@ -32,7 +33,17 @@ pending) · ❌ not possible here (with reason)
 | Shared hash-equivalence server | ✅ | `bitbake-hashserv` systemd unit on the build host, db outside `build/`, seeded from the local one; without it mirrored sstate resolves to different unihashes and never matches |
 | Scoped Nexus write account | ✅ | `yocto-ci`: `ADD/EDIT/READ/BROWSE` on the three raw repos only — verified 201 in-scope, 403 out-of-scope, 403 on the admin API |
 | Yocto 6.0 (wrynose) migration — base image | ✅ | `openembedded-core`+`bitbake 2.18`+`meta-yocto` replace the retired `poky` bundle; clean 5080-task build, `sbom-cve-check` → SBOM/VEX pipeline verified (81 components, 79 CPE) against the same scarthgap output shape. Isolated in `~/wrynose-layers/` + `build-wrynose/` — does not touch production |
-| Yocto 6.0 (wrynose) migration — RAUC A/B | 🟢 | image + signed bundle building in an isolated `build-rauc-wrynose/` tree; U-Boot jumps to 2026.01 (oe-core's native version) — same class of unverified risk as the scarthgap U-Boot 2025.04 regression below, so this needs the same on-hardware boot + rollback proof before it's trusted |
+| Yocto 6.0 (wrynose) migration — RAUC A/B | ✅ | **verified on the real Pi 3 B+ 2026-08-30.** Isolated `build-rauc-wrynose/` tree, image + signed bundle, U-Boot **2026.01** (oe-core's native version). Unlike the scarthgap U-Boot 2025.04 regression below, 2026.01 *does* source `boot.scr`: booted slot A with `root=/dev/mmcblk0p2 rauc.slot=A panic=10`, `mark-bad` → `BOOT_ORDER=B` → rebooted to `root=/dev/mmcblk0p3 rauc.slot=B` with A reported `bad`, then `mark-active other` → back to A with both slots `good` and tries restored 3/3. Two real bugs were caught getting here — see *Signing &amp; keys* and the note below |
+
+*Two bugs the wrynose RAUC build surfaced, both fixed before the hardware run:*
+(1) **the bundle was signed with upstream's public demo key** — `meta-rauc-community`'s
+`layer.conf` sets `RAUC_KEY_FILE ?=` / `RAUC_CERT_FILE ?=`, and every `layer.conf`
+parses *before* any recipe, so our recipe's `?=` silently no-opped and the bundle
+verified as `CN = Test Org Development-1`. Fixed by making ours unconditional `=`.
+(2) **root login was impossible** — `debug-tweaks` is three features, and dropping it
+for explicit ones missed `empty-root-password`; without it the rootfs postprocess
+forces an unknown random password into `/etc/shadow`, so serial *and* SSH both reject
+a login that no password can satisfy.
 
 ## Supply-chain security
 
@@ -95,7 +106,7 @@ Deep dive + the on-hardware rollback demo: [rauc-ab-updates.md](rauc-ab-updates.
 | Capability | Status | Notes |
 |---|---|---|
 | Dev signing keys (GPG + x509) | ✅ | `scripts/generate-signing-keys.sh`; private halves gitignored |
-| RAUC bundle signing | ✅ | `RAUC_KEY_FILE`/`RAUC_CERT_FILE`; `rauc info` shows the inline signature + version `2026.07.0` |
+| RAUC bundle signing | ✅ | `RAUC_KEY_FILE`/`RAUC_CERT_FILE`; `rauc info` shows the inline signature + version `2026.07.0`. Set with unconditional `=`, **not `?=`** — `meta-rauc-community`'s `layer.conf` also defaults them (to its public example keys) and every `layer.conf` wins over a recipe's `?=` |
 | On-device bundle verification | ✅ | `/etc/rauc/development-1.cert.pem` keyring — a real `rauc install` verified the signature before writing slot B |
 
 ---

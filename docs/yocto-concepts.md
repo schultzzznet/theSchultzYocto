@@ -246,20 +246,45 @@ parallel trees exist on the build host right now:
 |---|---|---|
 | `~/poky`, `~/meta-raspberrypi`, `~/meta-rauc` (scarthgap) | shared, production | `build/` (nightly scan) and `build-rauc/` (nightly A/B bundle) |
 | `~/openembedded-core`, `~/bitbake`, `~/meta-yocto`, `~/wrynose-layers/{meta-raspberrypi,meta-rauc}` (wrynose) | isolated | `build-wrynose/` — plain image, proven (5080/5080 tasks, SBOM/VEX verified end-to-end) |
-| `~/wrynose-layers/meta-rauc-community` (wrynose-compatible `master`) | isolated | `build-rauc-wrynose/` — A/B image + signed bundle, hardware verification in progress |
+| `~/wrynose-layers/meta-rauc-community` (wrynose-compatible `master`) | isolated | `build-rauc-wrynose/` — A/B image + signed bundle, verified on hardware 2026-08-30 |
 
 ### Current status
 
-The **base image** migration is done and proven: a clean 5080-task build,
-CVE/SBOM/VEX pipeline verified component-for-component against the scarthgap
-output (81 components, 79 with CPE either way). The **A/B/RAUC** migration is
-still being verified on real hardware — U-Boot 2026.01 is an unknown
-quantity until it's watched boot over serial and put through a
-mark-bad/mark-active rollback trace, exactly as was done (and once failed!)
-for the scarthgap U-Boot bump. **Production stays on scarthgap** — nightly
-`build/` and `build-rauc/` — until that hardware verification passes; nothing
-about the migration touches them. See [status.md](status.md) and
-[GAPS.md](GAPS.md) for the up-to-date verification state.
+Both halves are done and proven on real hardware.
+
+The **base image** migration: a clean 5080-task build, CVE/SBOM/VEX pipeline
+verified component-for-component against the scarthgap output (81 components,
+79 with CPE either way).
+
+The **A/B/RAUC** migration (verified 2026-08-30 on the Pi 3 B+): U-Boot
+**2026.01** turned out to be fine where 2025.04 was not — it sources `boot.scr`,
+so the booted slot carried `root=/dev/mmcblk0p2 rauc.slot=A panic=10`, and the
+full rollback trace worked: `mark-bad` → `BOOT_ORDER=B` → reboot into
+`root=/dev/mmcblk0p3 rauc.slot=B` (with A correctly reported `bad`) →
+`mark-active other` → back to A with both slots `good` and tries restored 3/3.
+That narrows the earlier regression to 2025.04/`lts-u-boot-mixin` specifically
+rather than "newer U-Boot" generally.
+
+Two genuine bugs surfaced on the way there, both worth remembering:
+
+- **The bundle was signed with upstream's public demo key.**
+  `meta-rauc-community`'s `layer.conf` sets `RAUC_KEY_FILE ?=` and
+  `RAUC_CERT_FILE ?=` pointing at its own example keys. Every `layer.conf`
+  parses *before* any recipe, so our recipe's `?=` never fired and the bundle
+  verified as `CN = Test Org Development-1`. Anything security-relevant gets an
+  unconditional `=`. (No device was ever at risk — the on-device keyring is
+  still our own cert, so a demo-signed bundle would simply have been rejected.)
+- **Root login was impossible.** `debug-tweaks` is a bundle of *three*
+  features; replacing it with explicit ones missed `empty-root-password`.
+  Without that, image postprocessing forces an unknown random password into
+  `/etc/shadow` — so serial *and* SSH both reject a login that no password can
+  satisfy, even though `allow-empty-password` and `allow-root-login` are set.
+
+**Production still stays on scarthgap** — nightly `build/` and `build-rauc/`,
+and every production-shared script still points at `poky/`. The remaining step
+is a deliberate cutover decision, not a technical unknown. See
+[status.md](status.md) and [GAPS.md](GAPS.md) for the up-to-date verification
+state.
 
 ## Safe and secure, concretely
 
