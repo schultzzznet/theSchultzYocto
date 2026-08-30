@@ -47,8 +47,9 @@ SOURCES_REPO="${SOURCES_REPO:-yocto-sources-raw}"
 SSTATE_REPO="${SSTATE_REPO:-yocto-sstate-raw}"
 
 BUILD_DIR="${BUILD_DIR:-$WORK_DIR/$SCHULTZ_BUILD}"
-DL_DIR="${DL_DIR:-$BUILD_DIR/downloads}"
-SSTATE_DIR="${SSTATE_DIR:-$BUILD_DIR/sstate-cache}"
+# Shared across all build dirs (scripts/release-profile.sh), not $BUILD_DIR/*.
+DL_DIR="${DL_DIR:-$WORK_DIR/$SCHULTZ_DL_DIR}"
+SSTATE_DIR="${SSTATE_DIR:-$WORK_DIR/$SCHULTZ_SSTATE_DIR}"
 JOBS="${JOBS:-4}"
 
 DO_SOURCES=1 DO_SSTATE=1 DRY_RUN=0

@@ -78,3 +78,11 @@ schultz_cve_report() {
 # One lock for every heavy build, independent of release: the host has 4 cores
 # and must never run two bitbakes at once, not even one per release.
 SCHULTZ_BUILD_LOCK="${SCHULTZ_BUILD_LOCK:-.schultz-build.lock}"
+
+# Caches are shared by EVERY build dir and every release — they are pure caches,
+# and DL_DIR/SSTATE_DIR are in BB_BASEHASH_IGNORE_VARS so their location never
+# affects a task hash. Four private copies cost ~36 GB of duplicated downloads
+# before this was consolidated. Release-independent on purpose: scarthgap and
+# wrynose sstate coexist happily, each keyed by its own unihashes.
+SCHULTZ_DL_DIR="${SCHULTZ_DL_DIR:-yocto-downloads}"
+SCHULTZ_SSTATE_DIR="${SCHULTZ_SSTATE_DIR:-yocto-sstate}"

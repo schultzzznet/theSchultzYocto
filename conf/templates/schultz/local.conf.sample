@@ -119,6 +119,15 @@ OE_FRAGMENTS += "core/yocto/sbom-cve-check"
 # create_symlinks then tries to symlink a file onto itself (FileExistsError).
 IMAGE_VERSION_SUFFIX = "-${DISTRO_VERSION}"
 
+# --- Shared caches across every build dir ---
+# Each build dir otherwise keeps its OWN downloads/ and sstate-cache/. With four
+# trees (scarthgap + wrynose, each with a RAUC variant) that cost ~36 GB of
+# duplicated downloads on the build host. DL_DIR, SSTATE_DIR and TMPDIR are all
+# in BB_BASEHASH_IGNORE_VARS, so pointing them elsewhere invalidates no sstate --
+# and sharing sstate means every tree benefits from the others' build output.
+DL_DIR = "${HOME}/yocto-downloads"
+SSTATE_DIR = "${HOME}/yocto-sstate"
+
 # --- Optional: attack-surface hardening (opt-in; everything below is OFF) ---
 # The "controlled, config-driven" way to decide what a given image can even do
 # is native Yocto vars -- no custom tooling needed. Uncomment a knob and that

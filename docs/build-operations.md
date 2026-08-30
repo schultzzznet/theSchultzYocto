@@ -91,9 +91,11 @@ ssh rpi5g16nvme 'pgrep -af bitbake'
 # kill any PIDs it lists (SIGTERM first, SIGKILL if a bitbake-server lingers)
 ssh rpi5g16nvme 'kill <pids...>'
 
-# 2. Wipe the untrustworthy state, keep downloads/ (checksum-verified by
-#    the fetcher regardless, no benefit to re-fetching ~GBs of source)
-ssh rpi5g16nvme 'rm -rf ~/build-wrynose/tmp ~/build-wrynose/sstate-cache'
+# 2. Wipe the untrustworthy state -- only tmp/. downloads and sstate now live
+#    OUTSIDE the build dir (~/yocto-downloads, ~/yocto-sstate, shared by every
+#    build dir), so this rebuilds mostly from sstate instead of re-fetching and
+#    recompiling the world.
+ssh rpi5g16nvme 'rm -rf ~/build-wrynose/tmp'
 
 # 3. Relaunch -- safe to re-run, see remote-build.sh
 ssh rpi5g16nvme 'cd theSchultzYocto && ./scripts/remote-build.sh'
