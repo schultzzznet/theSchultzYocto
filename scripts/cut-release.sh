@@ -9,12 +9,12 @@
 #   1. git pull --ff-only        -- pick up the version bump you pushed to origin
 #   2. read the version          -- RAUC_BUNDLE_VERSION is the single source of
 #                                   truth; warn if IMAGE_VERSION (os-release) differs
-#   3. bitbake image + bundle    -- the A/B .wic.gz + signed .raucb (build-rauc)
+#   3. bitbake image + bundle    -- the A/B .wic.gz + signed .raucb (RAUC build dir)
 #   4. verify                    -- rauc info Version == release + valid signature
-#   5. Dependency-Track snapshot -- upload-sbom.sh on the build-rauc A/B image,
+#   5. Dependency-Track snapshot -- upload-sbom.sh on that A/B image,
 #                                   as an immutable DT project version <version>
 #   6. archive                   -- bundle + image + SBOM + VEX + PROVENANCE.txt
-#                                   under build-rauc/releases/<version>/
+#                                   under <rauc build dir>/releases/<version>/
 #   7. git tag v<version>        -- annotated; pushed to origin (best-effort)
 #
 # Options:  --no-build  --no-tag  --no-pull  --no-publish  [VERSION-override]
@@ -31,12 +31,17 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(dirname "$REPO_DIR")"
+
+# shellcheck disable=SC1091
+source "$REPO_DIR/scripts/release-profile.sh"
+
 MACHINE="raspberrypi3-64"
 # Variant-aware: default is the standard bundle/image; override via env to cut a
 # variant (e.g. the hardened squashfs bundle) through this same pipeline.
 IMAGE="${SCHULTZ_IMAGE:-schultz-image-minimal}"
 BUNDLE="${SCHULTZ_BUNDLE:-schultz-bundle}"
-IMAGES_DIR="$WORK_DIR/build-rauc/tmp/deploy/images/$MACHINE"
+RB="$SCHULTZ_RAUC_BUILD"
+IMAGES_DIR="$WORK_DIR/$RB/tmp/deploy/images/$MACHINE"
 
 DO_BUILD=1 DO_TAG=1 DO_PULL=1 DO_PUBLISH=1 VERSION_OVERRIDE=""
 for a in "$@"; do
@@ -69,12 +74,12 @@ VERSION="${VERSION_OVERRIDE:-$BUNDLE_VER}"
 if [ -n "$IMAGE_VER" ] && [ "$IMAGE_VER" != "${VERSION%%-*}" ]; then
   echo "WARNING: os-release IMAGE_VERSION ($IMAGE_VER) != release (${VERSION%%-*}); bump both to match." >&2
 fi
-echo "==== cutting release $VERSION ===="
+echo "==== cutting release $VERSION ($SCHULTZ_RELEASE) ===="
 
 # oe-init-build-env is not set -u safe.
 set +u
 # shellcheck disable=SC1091
-source "$WORK_DIR/poky/oe-init-build-env" "$WORK_DIR/build-rauc" >/dev/null 2>&1
+source "$WORK_DIR/$SCHULTZ_OE_INIT" "$WORK_DIR/$RB" >/dev/null 2>&1
 set -u
 
 # 3. Build the A/B image + signed bundle.
@@ -86,7 +91,7 @@ RAUCB="$IMAGES_DIR/${BUNDLE}-${MACHINE}.raucb"
 [ -f "$RAUCB" ] || { echo "no bundle at $RAUCB -- build first (drop --no-build)" >&2; exit 1; }
 
 # 4. Verify: signature valid + bundle Version equals the release version.
-RN="$(find "$WORK_DIR/build-rauc/tmp" -path '*rauc-native*/usr/bin/rauc' -type f 2>/dev/null | head -1)"
+RN="$(find "$WORK_DIR/$RB/tmp" -path '*rauc-native*/usr/bin/rauc' -type f 2>/dev/null | head -1)"
 CT="$(find "$REPO_DIR" -name 'development-1.cert.pem' 2>/dev/null | head -1)"
 if [ -x "$RN" ] && [ -n "$CT" ]; then
   INFO_VER="$("$RN" info --keyring="$CT" "$RAUCB" 2>/dev/null | sed -nE "s/^Version:[[:space:]]*'([^']+)'.*/\1/p" | head -1)"
@@ -94,13 +99,13 @@ if [ -x "$RN" ] && [ -n "$CT" ]; then
   echo "verified: signed bundle, Version $INFO_VER"
 fi
 
-# 5 + 6. Dependency-Track snapshot + archive of the build-rauc A/B image.
-R="$WORK_DIR/build-rauc/releases/$VERSION"
+# 5 + 6. Dependency-Track snapshot + archive of the A/B image.
+R="$WORK_DIR/$RB/releases/$VERSION"
 mkdir -p "$R"
 [ -f "$WORK_DIR/keys/dtrack.env" ] && { set -a; . "$WORK_DIR/keys/dtrack.env"; set +a; }
 if [ "$DO_PUBLISH" = 1 ] && [ -n "${DTRACK_URL:-}" ] && [ -f "$WORK_DIR/keys/dtrack-api-key" ]; then
   export DTRACK_API_KEY="$(cat "$WORK_DIR/keys/dtrack-api-key")"
-  export SCHULTZ_BUILD_SUBDIR="build-rauc"
+  export SCHULTZ_BUILD_SUBDIR="$RB"
   export SCHULTZ_IMAGE_NAME="$IMAGE"
   export DTRACK_PROJECT_VERSION="$VERSION"
   export SBOM_ARCHIVE_DIR="$R"
@@ -118,12 +123,12 @@ for ext in wic.gz wic.bz2 squashfs; do
   [ -f "$SRC" ] && { cp -Lf "$SRC" "$R/schultz-ab-image-${VERSION}.$ext"; break; }
 done
 {
-  echo "theSchultzYocto -- release $VERSION (scarthgap) -- $MACHINE"
-  echo "Ubuntu-style CalVer; built on Yocto $(read_var "$WORK_DIR/poky/meta-poky/conf/distro/poky.conf" DISTRO_VERSION) scarthgap (LTS)."
+  echo "theSchultzYocto -- release $VERSION ($SCHULTZ_RELEASE) -- $MACHINE"
+  echo "Ubuntu-style CalVer; built on Yocto $(read_var "$WORK_DIR/$SCHULTZ_DISTRO_CONF" DISTRO_VERSION) $SCHULTZ_RELEASE (LTS)."
   echo
   echo "Layer commits (reproducible pin):"
-  for l in poky meta-raspberrypi meta-rauc meta-rauc-community theSchultzYocto; do
-    [ -d "$WORK_DIR/$l/.git" ] && printf "  %-20s : %s\n" "$l" "$(git -C "$WORK_DIR/$l" rev-parse HEAD)"
+  for l in $SCHULTZ_PROVENANCE_LAYERS; do
+    [ -d "$WORK_DIR/$l/.git" ] && printf "  %-34s : %s\n" "$l" "$(git -C "$WORK_DIR/$l" rev-parse HEAD)"
   done
   echo
   echo "rauc bundle Version: $VERSION"
@@ -167,7 +172,7 @@ if [ "$DO_TAG" = 1 ] && [ -d "$REPO_DIR/.git" ]; then
   else
     git -C "$REPO_DIR" tag -a "$TAG" \
       -m "theSchultzYocto $VERSION (scarthgap)" \
-      -m "Signed RAUC A/B release on Yocto LTS. See build-rauc/releases/$VERSION/PROVENANCE.txt."
+      -m "Signed RAUC A/B release on Yocto LTS. See $RB/releases/$VERSION/PROVENANCE.txt."
     if git -C "$REPO_DIR" push origin "$TAG" 2>/dev/null; then
       echo "tagged + pushed $TAG"
     else

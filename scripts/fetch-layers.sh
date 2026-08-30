@@ -19,17 +19,13 @@
 #
 #   meta-rauc and meta-raspberrypi still use codename branches (wrynose).
 #
-# DANGER -- meta-rauc/meta-raspberrypi are SHARED sibling directories. If a
-# scarthgap production build (build/, build-rauc/) is still running from the
-# SAME siblings, running this with branch=wrynose switches those directories
-# out from under it -- confirmed 2026-08-29: this broke the nightly cron with
-# "Layer raspberrypi is not compatible with the core layer which only
-# supports these series: scarthgap". While two releases are in parallel use,
-# either (a) finish cutting scarthgap over first (retire build/, build-rauc/,
-# see docs/rauc-ab-updates.md's migration notes), or (b) clone a second,
-# differently-named copy for whichever release is NOT production and repoint
-# that build dir's conf/bblayers.conf at it -- do not let both trees share
-# meta-raspberrypi/meta-rauc while one of them is still live.
+# The BSP/RAUC layers are cloned into the ACTIVE RELEASE'S layer directory
+# (scripts/release-profile.sh -> SCHULTZ_LAYER_DIR, e.g. wrynose-layers/), never
+# into the top-level siblings. That is deliberate: sharing meta-raspberrypi and
+# meta-rauc between two Yocto series switches them out from under whichever tree
+# isn't being fetched, which broke the nightly cron on 2026-08-29 with "Layer
+# raspberrypi is not compatible with the core layer which only supports these
+# series: scarthgap". Each series gets its own clone; nothing is shared.
 
 set -euo pipefail
 
@@ -38,27 +34,30 @@ BRANCH="${1:-wrynose}"
 BITBAKE_BRANCH="2.18"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$REPO_DIR/scripts/release-profile.sh"
 
 cd "$ROOT_DIR"
 
 clone_or_update() {
-  local url="$1" branch="$2" dir
-  dir="$(basename "$url" .git)"
+  local url="$1" branch="$2" dir="${3:-}"
+  [ -n "$dir" ] || dir="$(basename "$url" .git)"
+  mkdir -p "$(dirname "$dir")"
   if [ -d "$dir" ]; then
     echo "$dir/ already present -- updating $branch"
     git -C "$dir" fetch -q origin "$branch"
     git -C "$dir" checkout -q "$branch"
     git -C "$dir" merge -q --ff-only "origin/$branch" || echo "  (ff-only failed -- working tree may be ahead)"
   else
-    git clone -b "$branch" "$url"
+    git clone -b "$branch" "$url" "$dir"
   fi
 }
 
 clone_or_update https://git.openembedded.org/openembedded-core "$BRANCH"
 clone_or_update https://git.openembedded.org/bitbake            "$BITBAKE_BRANCH"
 clone_or_update https://git.yoctoproject.org/meta-yocto         "$BRANCH"
-clone_or_update https://git.yoctoproject.org/meta-raspberrypi   "$BRANCH"
-clone_or_update https://github.com/rauc/meta-rauc.git           "$BRANCH"
+clone_or_update https://git.yoctoproject.org/meta-raspberrypi   "$BRANCH" "$SCHULTZ_LAYER_DIR/meta-raspberrypi"
+clone_or_update https://github.com/rauc/meta-rauc.git           "$BRANCH" "$SCHULTZ_LAYER_DIR/meta-rauc"
 
 "$REPO_DIR/scripts/generate-signing-keys.sh"
 
@@ -68,6 +67,6 @@ Layers ready in: $ROOT_DIR
 
 Next steps:
   cd "$ROOT_DIR"
-  TEMPLATECONF="\$PWD/theSchultzYocto/conf/templates/schultz" source openembedded-core/oe-init-build-env build
+  TEMPLATECONF="\$PWD/theSchultzYocto/conf/templates/schultz" source $SCHULTZ_OE_INIT $SCHULTZ_BUILD
   bitbake schultz-image-minimal
 EOF

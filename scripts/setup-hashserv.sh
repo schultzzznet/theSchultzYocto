@@ -24,11 +24,13 @@ set -euo pipefail
 PORT="${1:-8686}"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(dirname "$REPO_DIR")"
-POKY_DIR="${POKY_DIR:-$WORK_DIR/poky}"
-BUILD_DIR="${BUILD_DIR:-$WORK_DIR/build}"
+# shellcheck disable=SC1091
+source "$REPO_DIR/scripts/release-profile.sh"
+BUILD_DIR="${BUILD_DIR:-$WORK_DIR/$SCHULTZ_BUILD}"
 DB_DIR="${DB_DIR:-$HOME/hashserv}"
 DB="$DB_DIR/hashserv.db"
-HASHSERV_BIN="$POKY_DIR/bitbake/bin/bitbake-hashserv"
+# bitbake moved out of poky/ in wrynose, so the binary path is release-dependent.
+HASHSERV_BIN="${HASHSERV_BIN:-$WORK_DIR/$SCHULTZ_HASHSERV_BIN}"
 UNIT=/etc/systemd/system/bitbake-hashserv.service
 
 [ -x "$HASHSERV_BIN" ] || { echo "no bitbake-hashserv at $HASHSERV_BIN" >&2; exit 1; }
@@ -92,5 +94,5 @@ fi
 
 echo ""
 echo "Done. Verify with:"
-echo "  $POKY_DIR/bitbake/bin/bitbake-hashclient --address localhost:$PORT stats"
+echo "  $WORK_DIR/$SCHULTZ_HASHSERV_BIN --address localhost:$PORT stats"
 echo "A second build host points BB_HASHSERVE at $(hostname):$PORT instead of localhost."

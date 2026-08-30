@@ -38,11 +38,14 @@ IMAGE_NAME="${SCHULTZ_IMAGE_NAME:-schultz-image-minimal}"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(dirname "$REPO_DIR")"
 
-# Which build dir to read the manifest/cve-summary/pkgdata from. "build" is the
-# single-partition rolling image the daily scan tracks; set SCHULTZ_BUILD_SUBDIR
-# to "build-rauc" to snapshot the A/B RAUC image instead (e.g. for a dated
-# release of what actually ships to hardware). See docs/security-and-auditing.md.
-BUILD_SUBDIR="${SCHULTZ_BUILD_SUBDIR:-build}"
+# shellcheck disable=SC1091
+source "$REPO_DIR/scripts/release-profile.sh"
+
+# Which build dir to read the manifest/CVE report/pkgdata from. Defaults to the
+# active release's rolling image; set SCHULTZ_BUILD_SUBDIR to the RAUC build dir
+# to snapshot the A/B image instead (e.g. for a dated release of what actually
+# ships to hardware). See docs/security-and-auditing.md.
+BUILD_SUBDIR="${SCHULTZ_BUILD_SUBDIR:-$SCHULTZ_BUILD}"
 MANIFEST="$WORK_DIR/$BUILD_SUBDIR/tmp/deploy/images/raspberrypi3-64/${IMAGE_NAME}-raspberrypi3-64.rootfs.manifest"
 
 if [ ! -f "$MANIFEST" ]; then
@@ -50,13 +53,9 @@ if [ ! -f "$MANIFEST" ]; then
   exit 1
 fi
 
-# Wrynose 6.0: cve-check was removed; sbom-cve-check produces a yocto-format
-# JSON in DEPLOY_DIR_IMAGE (same structure as cve-summary.json, so
-# manifest-to-cyclonedx.py and manifest-to-vex.py work unchanged).
-# NOTE: build/conf/local.conf is NOT git-managed (only copied from the
-# template when a build dir is first created), so production still runs
-# cve-check, not sbom-cve-check, until it's explicitly switched over.
-CVE_SUMMARY="$WORK_DIR/$BUILD_SUBDIR/tmp/log/cve/cve-summary.json"
+# scarthgap's cve-check and wrynose's sbom-cve-check write the same
+# `package[].issue[]` structure to different paths; the profile knows which.
+CVE_SUMMARY="$(schultz_cve_report "$WORK_DIR" "$BUILD_SUBDIR" "$IMAGE_NAME")"
 PKGDATA_DIR="$WORK_DIR/$BUILD_SUBDIR/tmp/pkgdata/raspberrypi3-64/runtime-reverse"
 
 SBOM_CDX="$(mktemp /tmp/schultz-sbom-XXXXXX.cdx.json)"
@@ -80,7 +79,7 @@ if [ -f "$CVE_SUMMARY" ]; then
   # harmless -- the generator just falls back to name/prefix matching.
   python3 "$REPO_DIR/scripts/manifest-to-cyclonedx.py" "$MANIFEST" "$IMAGE_NAME" "$PROJECT_VERSION" "$CVE_SUMMARY" "$PKGDATA_DIR" > "$SBOM_CDX"
 else
-  echo "No cve-summary.json at $CVE_SUMMARY -- uploading with generic PURLs only (no CPEs; enable cve-check for real DT matching)." >&2
+  echo "No CVE report at $CVE_SUMMARY -- uploading with generic PURLs only (no CPEs; enable the CVE scan for real DT matching)." >&2
   python3 "$REPO_DIR/scripts/manifest-to-cyclonedx.py" "$MANIFEST" "$IMAGE_NAME" "$PROJECT_VERSION" > "$SBOM_CDX"
 fi
 archive_artifact "$SBOM_CDX" sbom.cdx.json
@@ -113,10 +112,10 @@ fi
 
 echo "Uploaded SBOM to ${DTRACK_URL} as ${PROJECT_NAME}:${PROJECT_VERSION} (HTTP $HTTP_STATUS)"
 
-# Without cve-check data there is nothing to assert about which findings Yocto
+# Without CVE-scan data there is nothing to assert about which findings Yocto
 # already fixed, so the VEX step is skipped and DT keeps every CPE match active.
 if [ ! -f "$CVE_SUMMARY" ]; then
-  echo "No cve-summary.json -- skipping VEX (findings will not be auto-dismissed)."
+  echo "No CVE report -- skipping VEX (findings will not be auto-dismissed)."
   exit 0
 fi
 

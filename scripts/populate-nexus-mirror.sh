@@ -27,6 +27,8 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(dirname "$REPO_DIR")"
+# shellcheck disable=SC1091
+source "$REPO_DIR/scripts/release-profile.sh"
 
 if [ -f "$WORK_DIR/keys/nexus.env" ]; then
   set -a
@@ -44,7 +46,7 @@ NEXUS_WRITE_PASS="${NEXUS_WRITE_PASS:-}"
 SOURCES_REPO="${SOURCES_REPO:-yocto-sources-raw}"
 SSTATE_REPO="${SSTATE_REPO:-yocto-sstate-raw}"
 
-BUILD_DIR="${BUILD_DIR:-$WORK_DIR/build}"
+BUILD_DIR="${BUILD_DIR:-$WORK_DIR/$SCHULTZ_BUILD}"
 DL_DIR="${DL_DIR:-$BUILD_DIR/downloads}"
 SSTATE_DIR="${SSTATE_DIR:-$BUILD_DIR/sstate-cache}"
 JOBS="${JOBS:-4}"

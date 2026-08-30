@@ -41,7 +41,9 @@ DEVICE_HOST="${TARGET#*@}"
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(dirname "$REPO_DIR")"
-REL_ROOT="$WORK_DIR/build-rauc/releases"
+# shellcheck disable=SC1091
+source "$REPO_DIR/scripts/release-profile.sh"
+REL_ROOT="$WORK_DIR/$SCHULTZ_RAUC_BUILD/releases"
 # Variant-aware bundle filename: SCHULTZ_BUNDLE_BASENAME defaults to the standard
 # bundle; set it to schultz-bundle-hardened for the hardened flavour.
 BUNDLE_NAME="${SCHULTZ_BUNDLE_BASENAME:-schultz-bundle}-$VERSION.raucb"

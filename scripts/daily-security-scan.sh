@@ -6,20 +6,22 @@
 #   1. git pull (ff-only) so recipe changes pushed from the workstation are
 #      picked up -- this is what keeps the VEX's recipe-scoping tracking the
 #      *current* image: add or remove a recipe and the next scan reflects it.
-#   1b. Track the Yocto LTS branch: ff-only pull scarthgap point-releases on
-#      poky/meta-raspberrypi/meta-rauc so the image gets LTS CVE backports
-#      (SCHULTZ_UPDATE_LTS_LAYERS=0 to freeze). meta-rauc-community stays pinned.
+#   1b. Track the Yocto LTS branch: ff-only pull point-releases on whichever
+#      layers the active release profile lists, so the image gets LTS CVE
+#      backports (SCHULTZ_UPDATE_LTS_LAYERS=0 to freeze). A layer that is not on
+#      its expected branch is left alone; meta-rauc-community stays pinned.
 #   1c. Preflight every endpoint before building. A stale URL costs seconds to
 #      detect here and ~20 wasted minutes to detect at the upload stage.
 #      Dependency-Track unreachable aborts; DefectDojo or Nexus unreachable just
 #      disables that stage.
-#   2. bitbake schultz-image-minimal -- refreshes the CVE database
-#      (cve-update-db), re-runs cve-check, and regenerates the .manifest +
-#      cve-summary.json + pkgdata that the SBOM and VEX are derived from.
+#   2. bitbake schultz-image-minimal -- refreshes the CVE database, re-runs the
+#      CVE scan, and regenerates the .manifest + per-package CVE report +
+#      pkgdata that the SBOM and VEX are derived from.
 #   3. upload-sbom.sh -- pushes the CPE-enriched SBOM and the freshly-scoped
 #      VEX to Dependency-Track, archiving a timestamped copy of both.
 #   4. build-rauc-bundle.sh -- rebuilds the deployable A/B RAUC image + signed
-#      update bundle from the same tree, in build-rauc/, and archives them
+#      update bundle from the same tree, in the profile's RAUC build dir, and
+#      archives them
 #      (skippable with SCHULTZ_BUILD_RAUC=0). This keeps the flashable SD image
 #      and the OTA bundle current with every recipe/CVE change too, not just DT.#   5. pentest-scan.sh + upload-pentest.sh -- runs the pen-test/hardening tools
 #      (nmap/ssh-audit/testssl/lynis/checksec/kernel-hardening-checker) and
@@ -52,20 +54,26 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(dirname "$REPO_DIR")"
 cd "$WORK_DIR"
 
+# Which Yocto release this pipeline builds (scarthgap|wrynose) and every path
+# that follows from it. See scripts/release-profile.sh.
+# shellcheck disable=SC1091
+source "$REPO_DIR/scripts/release-profile.sh"
+
 # Monitor a single, stable "living SBOM" project version by default (updated in
 # place each day) instead of spawning a new dated project every night. Named
 # releases (YYYY.MM.PATCH) are a separate, explicit upload. Override in keys/dtrack.env.
 export DTRACK_PROJECT_VERSION="${DTRACK_PROJECT_VERSION:-rolling}"
 
-LOG_DIR="$WORK_DIR/build/security-scan-logs"
+LOG_DIR="$WORK_DIR/$SCHULTZ_BUILD/security-scan-logs"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/scan-$(date -u +%Y%m%dT%H%M%SZ).log"
 exec >>"$LOG" 2>&1   # dated, greppable audit log, one per run
 
 echo "==== [$(date -Is)] daily security scan on $(hostname) ===="
+echo "release: $SCHULTZ_RELEASE  (build=$SCHULTZ_BUILD, rauc=$SCHULTZ_RAUC_BUILD)"
 
 # One build/scan at a time -- a manual remote-build.sh must not collide with us.
-exec 9>"$WORK_DIR/build/.security-scan.lock"
+exec 9>"$WORK_DIR/$SCHULTZ_BUILD_LOCK"
 if ! flock -n 9; then
   echo "another scan or build holds the lock -- skipping this run"
   exit 0
@@ -81,32 +89,31 @@ if [ "${SCHULTZ_GIT_PULL:-1}" = "1" ] && [ -d "$REPO_DIR/.git" ]; then
   git -C "$REPO_DIR" pull --ff-only || echo "git pull skipped/failed; using current tree"
 fi
 
-# 1b. Track the Yocto LTS branch. scarthgap (5.0) gets CVE backports as point
+# 1b. Track the Yocto LTS branch. An LTS series gets CVE backports as point
 #     releases -- without pulling them, the SBOM misses fixes already landed
-#     upstream. build/ is still scarthgap (production hasn't cut over to
-#     wrynose yet -- see scripts/fetch-layers.sh header); pull ff-only on the
-#     layers it actually uses. meta-rauc-community and meta-lts-mixins carry
-#     the bootloader/A-B integration, so they move deliberately with an
-#     on-hardware retest, never unattended overnight. A failed pull is
-#     non-fatal: we build whatever is checked out. Set
+#     upstream. Which layers (and which branch each must be on) comes from the
+#     release profile, so this follows a cutover automatically and never pulls a
+#     layer that is pinned or on another series. meta-rauc-community and
+#     meta-lts-mixins carry the bootloader/A-B integration, so they move
+#     deliberately with an on-hardware retest, never unattended overnight. A
+#     failed pull is non-fatal: we build whatever is checked out. Set
 #     SCHULTZ_UPDATE_LTS_LAYERS=0 to freeze the layers.
 if [ "${SCHULTZ_UPDATE_LTS_LAYERS:-1}" = "1" ]; then
-  echo "-- tracking Yocto LTS (scarthgap) point-releases --"
-  for _layer in poky meta-raspberrypi meta-rauc; do
+  echo "-- tracking Yocto LTS ($SCHULTZ_RELEASE) point-releases --"
+  for _spec in $SCHULTZ_LTS_LAYERS; do
+    _layer="${_spec%%:*}"
+    _want="${_spec##*:}"
     _d="$WORK_DIR/$_layer"
     [ -d "$_d/.git" ] || continue
     _head_branch="$(git -C "$_d" rev-parse --abbrev-ref HEAD 2>/dev/null)"
-    case "$_head_branch" in
-      scarthgap)
-        _before="$(git -C "$_d" rev-parse --short HEAD)"
-        git -C "$_d" pull --ff-only >/dev/null 2>&1 || echo "  $_layer: pull skipped/failed"
-        _after="$(git -C "$_d" rev-parse --short HEAD)"
-        if [ "$_before" != "$_after" ]; then echo "  $_layer: $_before -> $_after (LTS update)"; else echo "  $_layer: $_before (current)"; fi
-        ;;
-      *)
-        echo "  $_layer: not on scarthgap (pinned/detached) -- left as-is"
-        ;;
-    esac
+    if [ "$_head_branch" = "$_want" ]; then
+      _before="$(git -C "$_d" rev-parse --short HEAD)"
+      git -C "$_d" pull --ff-only >/dev/null 2>&1 || echo "  $_layer: pull skipped/failed"
+      _after="$(git -C "$_d" rev-parse --short HEAD)"
+      if [ "$_before" != "$_after" ]; then echo "  $_layer: $_before -> $_after (LTS update)"; else echo "  $_layer: $_before (current)"; fi
+    else
+      echo "  $_layer: on '$_head_branch', expected '$_want' (pinned/detached) -- left as-is"
+    fi
   done
 fi
 
@@ -172,15 +179,15 @@ if [ "${SCHULTZ_MIRROR_PUSH:-1}" = "1" ] && [ -n "${NEXUS_URL:-}" ]; then
   fi
 fi
 
-# 2. Refresh sbom-cve-check + regenerate the SBOM/VEX inputs. oe-init-build-env
+# 2. Refresh the CVE data + regenerate the SBOM/VEX inputs. oe-init-build-env
 #    is not set -u safe, so relax strict mode just for sourcing it.
-# NOTE: build/ is still scarthgap -- this MUST stay poky/ until production is
-# actually cut over to wrynose (see scripts/fetch-layers.sh header). Pointing
-# this at openembedded-core/ (wrynose's bitbake 2.18) broke the nightly cron
-# on 2026-08-29: "Could not include required file conf/multiconfig/.conf".
+#    The init script and build dir BOTH come from the release profile -- pairing
+#    one release's oe-init-build-env with another's build dir is what broke the
+#    nightly cron on 2026-08-29 ("Could not include required file
+#    conf/multiconfig/.conf"), so they must never be set independently.
 set +u
 # shellcheck disable=SC1091
-source poky/oe-init-build-env build
+source "$SCHULTZ_OE_INIT" "$SCHULTZ_BUILD"
 set -u
 echo "-- bitbake schultz-image-minimal --"
 if ! bitbake schultz-image-minimal; then

@@ -40,18 +40,22 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(dirname "$REPO_DIR")"
 cd "$WORK_DIR"
 
+# shellcheck disable=SC1091
+source "$REPO_DIR/scripts/release-profile.sh"
+
 MACHINE="raspberrypi3-64"
 IMAGE="schultz-image-minimal"
 BUNDLE="schultz-bundle"
-IMAGES_DIR="$WORK_DIR/build-rauc/tmp/deploy/images/$MACHINE"
-ARCHIVE_DIR="${RAUC_ARCHIVE_DIR:-$WORK_DIR/build-rauc/rauc-archive}"
+RB="$SCHULTZ_RAUC_BUILD"
+IMAGES_DIR="$WORK_DIR/$RB/tmp/deploy/images/$MACHINE"
+ARCHIVE_DIR="${RAUC_ARCHIVE_DIR:-$WORK_DIR/$RB/rauc-archive}"
 KEEP="${RAUC_ARCHIVE_KEEP:-5}"
 CHAINED="${SCHULTZ_BUILD_LOCK_HELD:-0}"
 
 # Standalone: write a dated, greppable log and keep the last 30. When chained,
 # inherit the scan's stdout so everything lands in that one run's log instead.
 if [ "$CHAINED" != "1" ]; then
-  LOG_DIR="$WORK_DIR/build-rauc/rauc-build-logs"
+  LOG_DIR="$WORK_DIR/$RB/rauc-build-logs"
   mkdir -p "$LOG_DIR"
   LOG="$LOG_DIR/rauc-$(date -u +%Y%m%dT%H%M%SZ).log"
   exec >>"$LOG" 2>&1
@@ -59,6 +63,7 @@ if [ "$CHAINED" != "1" ]; then
 fi
 
 echo "==== [$(date -Is)] RAUC image+bundle build on $(hostname) ===="
+echo "release: $SCHULTZ_RELEASE  (rauc build dir: $RB)"
 
 # Serialize against the daily security scan and any other heavy build: they both
 # coordinate on this one lock so a 4-core host never runs two full bitbakes at
@@ -66,17 +71,16 @@ echo "==== [$(date -Is)] RAUC image+bundle build on $(hostname) ===="
 # the same file) would block forever, so we skip. Standalone, we grab it
 # non-blockingly and bow out if a scan/build is already running.
 if [ "$CHAINED" != "1" ]; then
-  mkdir -p "$WORK_DIR/build"
-  exec 8>"$WORK_DIR/build/.security-scan.lock"
+  exec 8>"$WORK_DIR/$SCHULTZ_BUILD_LOCK"
   if ! flock -n 8; then
     echo "another scan/build holds the lock -- skipping this RAUC run"
     exit 0
   fi
 fi
 
-# 1. First-time setup (idempotent). A fast no-op once build-rauc/ exists.
-if [ ! -f "$WORK_DIR/build-rauc/conf/local.conf" ]; then
-  echo "-- build-rauc not initialised; running setup-rauc-build.sh --"
+# 1. First-time setup (idempotent). A fast no-op once the RAUC build dir exists.
+if [ ! -f "$WORK_DIR/$RB/conf/local.conf" ]; then
+  echo "-- $RB not initialised; running setup-rauc-build.sh --"
   "$REPO_DIR/scripts/setup-rauc-build.sh"
 fi
 
@@ -84,7 +88,7 @@ fi
 #      safe, so relax strict mode just for sourcing it.
 set +u
 # shellcheck disable=SC1091
-source poky/oe-init-build-env build-rauc
+source "$SCHULTZ_OE_INIT" "$RB"
 set -u
 
 echo "-- bitbake $IMAGE --"
@@ -116,7 +120,7 @@ fi
 
 # 4. Verify: signature must validate against our dev keyring, and rauc must be
 #    able to read the Compatible string (printed for the audit log).
-RAUC_NATIVE="$(find "$WORK_DIR/build-rauc/tmp" -path '*rauc-native*/usr/bin/rauc' -type f 2>/dev/null | head -1)"
+RAUC_NATIVE="$(find "$WORK_DIR/$RB/tmp" -path '*rauc-native*/usr/bin/rauc' -type f 2>/dev/null | head -1)"
 CERT="$(find "$REPO_DIR" -name 'development-1.cert.pem' 2>/dev/null | head -1)"
 if [ -x "$RAUC_NATIVE" ] && [ -n "$CERT" ]; then
   echo "-- rauc info (verify signature + compatible) --"

@@ -8,11 +8,17 @@ BBFILES ?= ""
 # Wrynose: poky was retired. ##OEROOT## now resolves to the openembedded-core/
 # directory. meta-poky and meta-yocto-bsp moved into the separate meta-yocto/
 # repo cloned as a sibling by scripts/fetch-layers.sh.
+#
+# meta-raspberrypi and meta-rauc are taken from wrynose-layers/, NOT from the
+# top-level siblings: those are a different Yocto series' clones, and pointing a
+# wrynose build at them fails with "Layer raspberrypi is not compatible with the
+# core layer which only supports these series". Each series keeps its own copy
+# (scripts/release-profile.sh -> SCHULTZ_LAYER_DIR).
 BBLAYERS ?= " \
   ##OEROOT##/meta \
   ##OEROOT##/../meta-yocto/meta-poky \
   ##OEROOT##/../meta-yocto/meta-yocto-bsp \
-  ##OEROOT##/../meta-raspberrypi \
-  ##OEROOT##/../meta-rauc \
+  ##OEROOT##/../wrynose-layers/meta-raspberrypi \
+  ##OEROOT##/../wrynose-layers/meta-rauc \
   ##OEROOT##/../theSchultzYocto \
   "
