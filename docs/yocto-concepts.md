@@ -311,11 +311,36 @@ Two genuine bugs surfaced on the way there, both worth remembering:
   satisfy, even though `allow-empty-password` and `allow-root-login` are set.
 
 **Production now runs on wrynose** — nightly `build-wrynose/` and
-`build-rauc-wrynose/`. The scarthgap tree is deliberately kept, not deleted: it
-is supported upstream until April 2028 and remains one environment variable
-away, which is what makes this cutover cheap to undo. See
-[status.md](status.md) and [GAPS.md](GAPS.md) for the up-to-date verification
-state.
+`build-rauc-wrynose/`, validated end-to-end with a full green nightly
+(`upload rc=0, rauc rc=0, pentest rc=0, mirror rc=0`). The scarthgap tree is
+deliberately kept, not deleted: it is supported upstream until April 2028 and
+remains one environment variable away, which is what makes this cutover cheap to
+undo. See [status.md](status.md) and [GAPS.md](GAPS.md) for the up-to-date
+verification state.
+
+### Two more bugs the cutover's first nightly caught
+
+Both are worth knowing because a *green build* would not have revealed either.
+
+**`do_sbom_cve_check` breaks on an sstate-restored image.** Upstream reads
+`${DEPLOY_DIR_IMAGE}/${IMAGE_NAME}.spdx.json`, and `IMAGE_NAME` ends in a
+`${DATETIME}` stamp that is `vardepsexclude`d. So when the CVE database updates
+but the image does not — the normal nightly case — the task re-runs with a fresh
+timestamp while `do_create_image_sbom_spdx` is restored from sstate under its
+original one, and it dies on a missing file. The fix is a *stable* suffix,
+`IMAGE_VERSION_SUFFIX = "-${DISTRO_VERSION}"`. Setting it **empty** looks
+correct and is a trap: that makes `IMAGE_NAME == IMAGE_LINK_NAME`, and
+`create_symlinks` then tries to symlink a file onto itself (`FileExistsError`).
+
+**`rauc-native` resolved the host's glib.** The bundle verification step found
+rauc under `sysroots-components`, which run bare links Ubuntu's
+`libglib-2.0.so.0`; wrynose's rauc needs glib 2.88's `g_unix_mount_entry_free`,
+so it died with a symbol lookup error *before reading the signature*. The script
+reported that as `bundle verification FAILED (bad signature or wrong keyring)` —
+a false alarm of exactly the kind that teaches you to ignore the real thing.
+Fixed by using the `recipe-sysroot-native` copy with that sysroot's
+`LD_LIBRARY_PATH`, and by reporting "cannot execute" separately from "signature
+bad".
 
 ## Safe and secure, concretely
 

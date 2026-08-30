@@ -15,6 +15,14 @@ paths and CVE-report path from it, so a rollback is one line and needs no
 rebuild — the scarthgap tree is still on disk and still buildable with
 `SCHULTZ_RELEASE=scarthgap`.
 
+**The cutover is validated end-to-end**: a full nightly on wrynose finished
+`upload rc=0, rauc rc=0, pentest rc=0, mirror rc=0` — 5411-task A/B image,
+5282-task signed bundle verified as `theSchultzYocto-raspberrypi3-64` /
+`2026.07.1` / `verity`, SBOM 79/81 CPEs and VEX 1213 entries to
+Dependency-Track, 5 DefectDojo uploads, and a clean Nexus mirror push.
+Getting there took three real bugs, all of which are written up below or in
+[GAPS.md](GAPS.md) — none of them showed up in a green build alone.
+
 **Latest release:** `2026.07.1` — Ubuntu-style CalVer, pinned by git tag
 `v2026.07.1` and its `PROVENANCE.txt`. The device **self-reports** it via
 `/etc/os-release` (`IMAGE_ID=theschultzyocto`, `IMAGE_VERSION=2026.07.1`), and it
