@@ -86,6 +86,12 @@ in the same format as the sibling repo's. [docs/GAPS.md](docs/GAPS.md) is the
 single consolidated list of open items, missing proofs, and deliberate ceilings
 — replaces hunting through five docs for "Still open" sections.
 
+Wondering *which machine* something runs on, what it costs in RAM and disk, or
+what is unrecoverable if a host dies?
+[docs/INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md) is the topology map — hosts,
+services, resource limits, the irreplaceable-vs-regenerable table, and why each
+service sits where it does.
+
 ## Why this exists
 
 Short version: yes, RPi3 + Yocto is a genuinely good way to actually learn
