@@ -29,10 +29,11 @@
 #      cross-tool aggregation pane). Non-fatal and OPT-IN: only runs when
 #      keys/defectdojo.env (DEFECTDOJO_URL) and PENTEST_TARGET are set, and
 #      never masks the primary SBOM result. Skip entirely with SCHULTZ_PENTEST=0.#
-#   6. populate-nexus-mirror.sh -- pushes downloads/ and sstate-cache/ into the
-#      Nexus raw mirrors that local.conf's SOURCE_MIRROR_URL/SSTATE_MIRRORS
-#      already point at. Those were configured but never populated, so they
-#      bought nothing until this step existed.
+#   6. populate-nexus-mirror.sh -- pushes downloads/ into the Nexus raw mirror
+#      that local.conf's SOURCE_MIRROR_URL already points at. Those were
+#      configured but never populated, so they bought nothing until this step
+#      existed. sstate is NOT pushed by default (SCHULTZ_MIRROR_SSTATE=1) --
+#      see the note at that step for why.
 #
 # Dependency-Track re-scans NVD on its own daily, but it will NOT refresh the
 # VEX suppressions -- so without this job, a CVE that Yocto has since patched
@@ -234,15 +235,28 @@ elif [ "${SCHULTZ_PENTEST:-1}" = "1" ]; then
   echo "-- pentest stage skipped: needs keys/defectdojo.env (DEFECTDOJO_URL) + PENTEST_TARGET --"
 fi
 
-# 6. Fill the Nexus source/sstate mirrors from the caches this run just
-#    refreshed, so a fresh build host -- or this one after a tmp//sstate wipe --
-#    can restore from the LAN instead of re-fetching the internet. Runs last and
-#    is deliberately excluded from the exit code: a full mirror is a convenience,
-#    a current SBOM is the job.
+# 6. Fill the Nexus source mirror from the caches this run just refreshed, so a
+#    fresh build host -- or this one after a tmp/ wipe -- can restore from the LAN
+#    instead of re-fetching the internet. Runs last and is deliberately excluded
+#    from the exit code: a full mirror is a convenience, a current SBOM is the job.
+#
+#    SSTATE IS NOT PUSHED BY DEFAULT. Sources and sstate hold different things and
+#    are worth mirroring for different reasons: upstream tarballs genuinely
+#    disappear, so mirroring them is a reproducibility guarantee that cannot be
+#    reconstructed later; sstate is derived data that can always be rebuilt from
+#    those sources. With a single build host, SSTATE_DIR serves every hit locally
+#    and the Nexus copy only adds disaster recovery -- for 24.6G against 18.0G,
+#    which is what overflowed the blob store on 2026-08-30. Set
+#    SCHULTZ_MIRROR_SSTATE=1 to push it anyway (check the blob store has room).
 mirror_rc=0
 if [ "${SCHULTZ_MIRROR_PUSH:-1}" = "1" ] && [ -f "$WORK_DIR/keys/nexus.env" ]; then
-  echo "-- populate-nexus-mirror.sh (downloads + sstate -> Nexus) --"
-  "$REPO_DIR/scripts/populate-nexus-mirror.sh" || mirror_rc=$?
+  if [ "${SCHULTZ_MIRROR_SSTATE:-0}" = "1" ]; then
+    echo "-- populate-nexus-mirror.sh (downloads + sstate -> Nexus) --"
+    "$REPO_DIR/scripts/populate-nexus-mirror.sh" || mirror_rc=$?
+  else
+    echo "-- populate-nexus-mirror.sh (sources -> Nexus; sstate skipped) --"
+    "$REPO_DIR/scripts/populate-nexus-mirror.sh" --sources || mirror_rc=$?
+  fi
   echo "mirror push rc=$mirror_rc"
 fi
 
