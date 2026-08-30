@@ -120,11 +120,25 @@ fi
 
 # 4. Verify: signature must validate against our dev keyring, and rauc must be
 #    able to read the Compatible string (printed for the audit log).
-RAUC_NATIVE="$(find "$WORK_DIR/$RB/tmp" -path '*rauc-native*/usr/bin/rauc' -type f 2>/dev/null | head -1)"
+#    Prefer a recipe-sysroot-native copy and run it with that sysroot's libs:
+#    the bare sysroots-components binary resolves the HOST's glib, and wrynose's
+#    rauc needs glib 2.88 symbols (g_unix_mount_entry_free) that Ubuntu 24.04
+#    does not have -- it then dies with "symbol lookup error" before ever
+#    looking at the signature.
+RAUC_NATIVE="$(find "$WORK_DIR/$RB/tmp/work" -path '*/recipe-sysroot-native/usr/bin/rauc' -type f 2>/dev/null | head -1)"
+[ -n "$RAUC_NATIVE" ] || RAUC_NATIVE="$(find "$WORK_DIR/$RB/tmp" -path '*rauc-native*/usr/bin/rauc' -type f 2>/dev/null | head -1)"
+RAUC_LIB="$(dirname "$(dirname "$RAUC_NATIVE")")/lib"
 CERT="$(find "$REPO_DIR" -name 'development-1.cert.pem' 2>/dev/null | head -1)"
 if [ -x "$RAUC_NATIVE" ] && [ -n "$CERT" ]; then
   echo "-- rauc info (verify signature + compatible) --"
-  if ! "$RAUC_NATIVE" info --keyring="$CERT" "$RAUCB"; then
+  # Separate "the tool could not run" from "the signature is bad": reporting a
+  # broken toolchain as a signature failure would hide a real one.
+  if ! LD_LIBRARY_PATH="$RAUC_LIB" "$RAUC_NATIVE" --version >/dev/null 2>&1; then
+    echo "WARN: rauc-native at $RAUC_NATIVE cannot execute -- bundle NOT verified" >&2
+    LD_LIBRARY_PATH="$RAUC_LIB" "$RAUC_NATIVE" --version 2>&1 | head -2 >&2
+    exit 1
+  fi
+  if ! LD_LIBRARY_PATH="$RAUC_LIB" "$RAUC_NATIVE" info --keyring="$CERT" "$RAUCB"; then
     echo "bundle verification FAILED (bad signature or wrong keyring)" >&2
     exit 1
   fi

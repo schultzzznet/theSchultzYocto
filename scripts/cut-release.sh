@@ -91,10 +91,19 @@ RAUCB="$IMAGES_DIR/${BUNDLE}-${MACHINE}.raucb"
 [ -f "$RAUCB" ] || { echo "no bundle at $RAUCB -- build first (drop --no-build)" >&2; exit 1; }
 
 # 4. Verify: signature valid + bundle Version equals the release version.
-RN="$(find "$WORK_DIR/$RB/tmp" -path '*rauc-native*/usr/bin/rauc' -type f 2>/dev/null | head -1)"
+#    Use a recipe-sysroot-native rauc with that sysroot's libs -- the bare
+#    sysroots-components binary resolves the host's glib and dies with a symbol
+#    lookup error on wrynose (needs glib 2.88's g_unix_mount_entry_free).
+RN="$(find "$WORK_DIR/$RB/tmp/work" -path '*/recipe-sysroot-native/usr/bin/rauc' -type f 2>/dev/null | head -1)"
+[ -n "$RN" ] || RN="$(find "$WORK_DIR/$RB/tmp" -path '*rauc-native*/usr/bin/rauc' -type f 2>/dev/null | head -1)"
+RN_LIB="$(dirname "$(dirname "$RN")")/lib"
 CT="$(find "$REPO_DIR" -name 'development-1.cert.pem' 2>/dev/null | head -1)"
 if [ -x "$RN" ] && [ -n "$CT" ]; then
-  INFO_VER="$("$RN" info --keyring="$CT" "$RAUCB" 2>/dev/null | sed -nE "s/^Version:[[:space:]]*'([^']+)'.*/\1/p" | head -1)"
+  # A release must never be cut on an unverified bundle, so a tool that cannot
+  # run is a hard failure here rather than a skipped check.
+  LD_LIBRARY_PATH="$RN_LIB" "$RN" --version >/dev/null 2>&1 || {
+    echo "rauc-native cannot execute ($RN) -- refusing to cut an unverified release" >&2; exit 1; }
+  INFO_VER="$(LD_LIBRARY_PATH="$RN_LIB" "$RN" info --keyring="$CT" "$RAUCB" 2>/dev/null | sed -nE "s/^Version:[[:space:]]*'([^']+)'.*/\1/p" | head -1)"
   [ "$INFO_VER" = "$VERSION" ] || { echo "bundle Version '$INFO_VER' != '$VERSION' -- bump RAUC_BUNDLE_VERSION and rebuild" >&2; exit 1; }
   echo "verified: signed bundle, Version $INFO_VER"
 fi
