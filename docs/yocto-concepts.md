@@ -17,9 +17,14 @@ The pieces, concretely:
 - **OpenEmbedded-Core (OE-Core)** — the foundational layer of metadata:
   toolchain recipes, core Unix userland, base classes almost everything else
   builds on.
-- **Poky** — a *reference distribution*: BitBake + OE-Core + a default distro
-  policy (`meta-poky`) + reference machines (`meta-yocto-bsp`, mostly QEMU
-  targets). It's a sane, working starting point, not "the" Yocto distro.
+- **Poky** — confusingly, *two* things, and only one of them still exists as a
+  repo. (a) The **reference distribution**: a distro policy (`meta-poky`) plus
+  reference machines (`meta-yocto-bsp`). This is alive and is what we build —
+  the device reports `Poky (Yocto Project Reference Distro) 6.0.3 (wrynose)`.
+  (b) The old **convenience repo** that bundled BitBake + OE-Core + `meta-poky`
+  into one clone. That one was retired after scarthgap — see
+  [the wrynose migration](#the-wrynose-migration-where-poky-went-and-how-this-was-rebuilt).
+  So "poky is retired" means the *bundle*, never the *distro*.
 - **Layers** (`meta-*`) — modular, stackable collections of recipes. Convention
   over configuration: everything is a layer, including your own customizations.
   In this repo, `meta-raspberrypi` is the Raspberry Pi hardware-support layer,
@@ -36,7 +41,9 @@ The pieces, concretely:
   architecture tuning). `raspberrypi3-64` comes from `meta-raspberrypi`.
 - **Distro config** — cross-cutting policy: init system, package manager
   format, default features. We use the stock `poky` distro
-  (`DISTRO = "poky"` in [local.conf.sample](../conf/templates/schultz/local.conf.sample)).
+  (`DISTRO = "poky"` in [local.conf.sample](../conf/templates/schultz/local.conf.sample)),
+  which on wrynose comes from `meta-yocto/meta-poky/` rather than the old
+  `poky/meta-poky/`. The setting itself never changed.
 
 ## How you actually make a distro
 
@@ -141,7 +148,14 @@ it, not just a new codename — worth understanding on its own, because "bump
 the branch name" (which is *all* scarthgap → any-earlier-release ever took)
 stopped working.
 
-### `poky` is retired
+### `poky` is retired — the *repo*, not the *distro*
+
+Worth separating up front, because the name is overloaded and "poky is dead"
+is a half-truth. **The poky reference distro is alive and is still what we
+build**: `DISTRO = "poky"` is unchanged, `meta-poky` now ships inside the
+`meta-yocto` repo, and the device still reports
+`Poky (Yocto Project Reference Distro) 6.0.3 (wrynose)`. What went away is the
+*convenience repo* of the same name.
 
 Every release through `scarthgap` was fetched as a single convenience repo,
 **`poky`**, which bundled three independent projects into one clone:
@@ -428,9 +442,14 @@ reason. Google's `repo` tool (Android-style multi-repo manifests) is the
 other common option. Worth adopting once you're juggling more than 2-3
 layers — not needed yet here.
 
-What deliberately stays *out* of git either way: `build/`, `downloads/`,
+What deliberately stays *out* of git either way: the build dirs, `downloads/`,
 `sstate-cache/`, `tmp/` — huge, host-specific, and fully reproducible from
-recipes + config. Already in [.gitignore](../.gitignore).
+recipes + config. Already in [.gitignore](../.gitignore). On the build host the
+two caches were pulled *out* of the build dirs entirely on 2026-08-30 — one
+shared `~/yocto-downloads` + `~/yocto-sstate` for every build dir and every
+release, since four private copies cost ~36 GB of duplication and `DL_DIR` /
+`SSTATE_DIR` are in `BB_BASEHASH_IGNORE_VARS` (so sharing them invalidates
+nothing).
 
 ### Nexus — shared caches and artifact storage
 
@@ -484,7 +503,8 @@ measured here, it re-runs unpack/patch/configure/compile for that recipe
 (`e2fsprogs` went from 4 to 23 pending tasks), which on `linux-raspberrypi`
 means a full kernel rebuild. `populate-nexus-mirror.sh` therefore backfills the
 tarballs with bitbake's own `tar` invocation (copied from
-`poky/bitbake/lib/bb/fetch2/git.py`, `GitFetcher.download()`) instead, and
+`bitbake/lib/bb/fetch2/git.py`, `GitFetcher.download()` — `poky/bitbake/…`
+before the split) instead, and
 leaves everything from then on to bitbake itself.
 
 **Trust boundary.** The two mirrors are not equally sensitive. Source tarballs
@@ -597,7 +617,7 @@ verdicts *back out* as a VEX.
 ```mermaid
 flowchart LR
   M[image .manifest] --> S[manifest-to-cyclonedx.py]
-  C[cve-check<br/>cve-summary.json] -->|CPE product + clean version| S
+  C["CVE scan report<br/>sbom-cve-check.yocto.json<br/>(cve-summary.json on scarthgap)"] -->|CPE product + clean version| S
   P[pkgdata runtime-reverse<br/>pkg → recipe PN] -->|resolve names| S
   S --> B[CycloneDX SBOM<br/>components + CPEs] --> DT[(Dependency-Track)]
   C -->|Patched / Ignored verdicts| V[manifest-to-vex.py]
@@ -608,8 +628,8 @@ flowchart LR
 
 #### Step 1 — CPE enrichment: making DT find the real CVEs
 
-`cve-check` already does the hard part of Yocto→NVD identity: for every recipe,
-its `cve-summary.json` records the **CPE product** name it matched against NVD
+The CVE scan already does the hard part of Yocto→NVD identity: for every recipe,
+its report records the **CPE product** name it matched against NVD
 (`products[].product`) plus the clean upstream version. So
 `manifest-to-cyclonedx.py` attaches a real CPE to each component:
 `cpe:2.3:a:*:<product>:<version>:*:*:*:*:*:*:*`. Two deliberate choices:
