@@ -9,9 +9,10 @@ remounted read-write. For a fielded device, NOT the learning sandbox. See the \
 require recipes-core/images/schultz-image-minimal.bb
 
 # 1. Drop debug-tweaks equivalent (wrynose: split into allow-empty-password +
-#    allow-root-login). With both gone root login is LOCKED (secure, but you
-#    can't get in). A real deployment MUST add auth via IMAGE_INSTALL.
-IMAGE_FEATURES:remove = "allow-empty-password allow-root-login"
+#    allow-root-login + empty-root-password -- see schultz-image-minimal.bb).
+#    With all three gone root login is LOCKED (secure, but you can't get in).
+#    A real deployment MUST add auth via IMAGE_INSTALL.
+IMAGE_FEATURES:remove = "allow-empty-password allow-root-login empty-root-password"
 
 # 2. Immutable root. read-only-rootfs mounts / read-only and wires up tmpfs for
 #    the few dirs that must be writable at runtime (/var/volatile, etc.).
