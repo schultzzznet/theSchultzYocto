@@ -219,6 +219,21 @@ mirror traffic in the releases feed. The three repos are entirely separate;
 [scripts/populate-nexus-mirror.sh](../scripts/populate-nexus-mirror.sh) uses
 `SOURCES_REPO` and `SSTATE_REPO` explicitly.
 
+**We also don't mirror sstate nightly (since 2026-08-30).** Sources and sstate
+look interchangeable — both are "caches" — but they are worth mirroring for
+opposite reasons. Upstream tarballs genuinely disappear, so `downloads/` is a
+reproducibility guarantee that **cannot be reconstructed later**; sstate is
+*derived* data that can always be rebuilt from those sources. With a single
+build host the local `SSTATE_DIR` serves every hit anyway, so the Nexus sstate
+copy buys disaster recovery only — for the larger half of the data (measured:
+**24.6 GB sstate vs 18.0 GB sources**). Pushing both overflowed the blob store,
+and Nexus's failure mode is HTTP 401/500 on every write, which reads like a
+credentials problem rather than a full disk. The nightly now pushes
+`--sources`; `SCHULTZ_MIRROR_SSTATE=1` re-enables sstate for a deliberate,
+room-checked run. Note the `git2/` bare clones (32 GB, including a 5.6 GB
+kernel) were never pushed — sources use `-maxdepth 1`, and the
+`BB_GENERATE_MIRROR_TARBALLS` tarballs are what represent them.
+
 **The trap that shaped it (five weeks, 2026-07-03 to 2026-08-12):** `SOURCE_MIRROR_URL` was set and `SSTATE_MIRRORS` was set, but `BB_GENERATE_MIRROR_TARBALLS` was not and nothing had ever uploaded to either repo. Every build silently 404'd on Nexus and fell through to the internet. The mirror *looked* configured. Proving a mirror actually works requires a build with `BB_FETCH_PREMIRRORONLY = "1"` and the local copies moved aside — not just "bytes uploaded."
 
 ---
