@@ -107,6 +107,18 @@ IMAGE_INSTALL:append = " rauc rauc-conf"
 # Report: tmp/deploy/images/<machine>/${IMAGE_LINK_NAME}.sbom-cve-check.yocto.json
 OE_FRAGMENTS += "core/yocto/sbom-cve-check"
 
+# Required for sbom-cve-check to survive an sstate-restored image. Upstream's
+# do_sbom_cve_check reads "${DEPLOY_DIR_IMAGE}/${IMAGE_NAME}.spdx.json", and
+# IMAGE_NAME defaults to a ${DATETIME} stamp that is vardepsexclude'd -- so when
+# the CVE database updates but the image does not (the normal nightly case),
+# do_sbom_cve_check re-runs with a NEW timestamp while do_create_image_sbom_spdx
+# is restored from sstate under its ORIGINAL one, and the task dies with
+# "No such file or directory: ...rootfs-<newstamp>.spdx.json".
+# A stable suffix removes the timestamp from the equation entirely. It must not
+# be EMPTY: that makes IMAGE_NAME == IMAGE_LINK_NAME, and image.bbclass's
+# create_symlinks then tries to symlink a file onto itself (FileExistsError).
+IMAGE_VERSION_SUFFIX = "-${DISTRO_VERSION}"
+
 # --- Optional: attack-surface hardening (opt-in; everything below is OFF) ---
 # The "controlled, config-driven" way to decide what a given image can even do
 # is native Yocto vars -- no custom tooling needed. Uncomment a knob and that
