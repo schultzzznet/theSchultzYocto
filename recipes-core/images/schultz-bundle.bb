@@ -49,5 +49,15 @@ RAUC_BUNDLE_COMPATIBLE = "theSchultzYocto-raspberrypi3-64"
 # (the device stamps the same CalVer into /etc/os-release).
 RAUC_BUNDLE_VERSION = "2026.07.1"
 
-RAUC_KEY_FILE ?= "${TOPDIR}/../keys/development-1.key.pem"
-RAUC_CERT_FILE ?= "${TOPDIR}/../keys/development-1.cert.pem"
+# Deliberately unconditional (=, not ?=). meta-rauc-community's layer.conf
+# ALSO defaults these (?=, pointing at its own public example keys) -- and all
+# layer.conf files parse before any recipe .bb file, so a ?= here would be a
+# no-op the moment upstream's default already claimed the variable. Confirmed
+# 2026-08-30: the wrynose-targeting meta-rauc-community `master` branch does
+# exactly this, and a bundle built with the old `?=` here silently signed with
+# upstream's public demo key ('O = Test Org, CN = Test Org Development-1')
+# instead of ours -- caught only because the on-device keyring (our own cert,
+# via rauc-conf.bbappend) would have rejected it. Never let an upstream
+# layer's convenience default outrank our own signing key.
+RAUC_KEY_FILE = "${TOPDIR}/../keys/development-1.key.pem"
+RAUC_CERT_FILE = "${TOPDIR}/../keys/development-1.cert.pem"
