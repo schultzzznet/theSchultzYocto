@@ -19,4 +19,4 @@ RAUC_SLOT_rootfs = "schultz-image-hardened"
 RAUC_SLOT_rootfs[fstype] = "squashfs"
 
 # Same CalVer line, -hardened qualifier, so a release can ship both flavours.
-RAUC_BUNDLE_VERSION = "2026.09.0-hardened"
+RAUC_BUNDLE_VERSION = "2026.09.1-hardened"
