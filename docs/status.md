@@ -23,13 +23,19 @@ Dependency-Track, 5 DefectDojo uploads, and a clean Nexus mirror push.
 Getting there took three real bugs, all of which are written up below or in
 [GAPS.md](GAPS.md) — none of them showed up in a green build alone.
 
-**Latest release:** `2026.07.1` — Ubuntu-style CalVer, pinned by git tag
-`v2026.07.1` and its `PROVENANCE.txt`. The device **self-reports** it via
-`/etc/os-release` (`IMAGE_ID=theschultzyocto`, `IMAGE_VERSION=2026.07.1`), and it
-was delivered to the running Pi **over the air** (`2026.07.0` → `2026.07.1`,
-slot A → B) with no re-flash. It was cut on scarthgap (Yocto 5.0.19); the next
-cut will be the first on wrynose. The `rolling` line now tracks wrynose
-point-releases nightly.
+**Latest release:** `2026.09.1` — the **first wrynose release**, cut 2026-09-01.
+Ubuntu-style CalVer, pinned by git tag `v2026.09.1` and its `PROVENANCE.txt`. The
+device **self-reports** it via `/etc/os-release`
+(`IMAGE_ID=theschultzyocto`, `IMAGE_VERSION=2026.09.1`) and it was delivered
+**over the air** from Nexus into slot B with no re-flash. The `rolling` line
+tracks wrynose point-releases nightly.
+
+> `2026.09.0` was **withdrawn** the same day and removed from Nexus and the
+> release archive. Its rootfs carried a keyring path that no longer exists on
+> wrynose, so a device running it could not verify — and therefore could not
+> install — any subsequent update. The git tag is deliberately left in place:
+> the commit is honest history, and deleting published tags is worse practice
+> than superseding them. `2026.09.1` is the fix.
 
 **Legend:** ✅ verified on hardware · 🟢 built &amp; wired (on-hardware proof
 pending) · ❌ not possible here (with reason)
@@ -105,7 +111,7 @@ Deep dive: [fleet-app.md](fleet-app.md).
 | Capability | Status | Notes |
 |---|---|---|
 | A/B dual-slot boot (U-Boot) | ✅ | verified 2026-07-06: U-Boot booted slot A, then B after an update, then rolled back to A (serial trace `A → B → A`); **re-proven 2026-08-19** on a freshly flashed card: `mark-bad` → `BOOT_ORDER=B` → serial `Found valid RAUC slot B` (`root=…p3 rauc.slot=B`) → `mark-active other` → `Found valid RAUC slot A`, ending with both slots `good` |
-| OTA update (`rauc install`) | ✅ | delivered **over the network** to the *running* Pi (`2026.07.0`→`2026.07.1`) with zero downtime: written to idle slot B, one reboot switched to B, `/etc/os-release` flipped; a marked-bad slot auto-rolled back to A |
+| OTA update (`rauc install`) | ✅ | delivered **over the network** to the *running* Pi with zero downtime: written to the idle slot, one reboot switched to it, `/etc/os-release` flipped; a marked-bad slot auto-rolled back. **Re-proven on wrynose 2026-09-01** (`2026.09.1`, streamed from Nexus into slot B) — which is also how we discovered OTA had been silently broken on 6.0 since the cutover: our `system.conf` pointed the keyring at `/etc/rauc/`, but newer meta-rauc installs it to `/usr/lib/rauc/`. `rauc status` never reads the keyring, so the whole A/B rollback proof passed while every install failed |
 | Signed + integrity-checked bundles | ✅ | `verity` (dm-verity) + signed; device keyring = our dev cert — signature verified on-device at install |
 | Release artifact store + OTA source | ✅ | each release published to the Nexus raw repo `schultz-releases-raw`; the Pi `rauc install`s **straight from Nexus** (HTTP range → true streaming, no scp) via `ota-deploy.sh <version> <ip> --reboot` |
 | Scripted release cut | ✅ | `cut-release.sh`: build → verify `rauc info` == version → SBOM/VEX to DT → archive + `PROVENANCE.txt` → publish to Nexus → git tag |
