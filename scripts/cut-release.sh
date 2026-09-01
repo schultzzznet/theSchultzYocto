@@ -112,8 +112,19 @@ fi
 R="$WORK_DIR/$RB/releases/$VERSION"
 mkdir -p "$R"
 [ -f "$WORK_DIR/keys/dtrack.env" ] && { set -a; . "$WORK_DIR/keys/dtrack.env"; set +a; }
-if [ "$DO_PUBLISH" = 1 ] && [ -n "${DTRACK_URL:-}" ] && [ -f "$WORK_DIR/keys/dtrack-api-key" ]; then
-  export DTRACK_API_KEY="$(cat "$WORK_DIR/keys/dtrack-api-key")"
+# The key comes from keys/dtrack.env like everywhere else. The standalone
+# keys/dtrack-api-key file is a legacy fallback ONLY: this script used to read
+# it unconditionally and thereby overwrote the good key from dtrack.env with a
+# stale one, which cut 2026.09.0 with "SBOM upload FAILED: HTTP 401" (and so no
+# VEX, since upload-sbom.sh stops at the SBOM). Two sources of truth for one
+# secret is the bug; prefer the env, and strip whitespace because a trailing
+# newline in the header makes DT answer a bare 400.
+if [ -z "${DTRACK_API_KEY:-}" ] && [ -f "$WORK_DIR/keys/dtrack-api-key" ]; then
+  DTRACK_API_KEY="$(cat "$WORK_DIR/keys/dtrack-api-key")"
+fi
+DTRACK_API_KEY="$(printf '%s' "${DTRACK_API_KEY:-}" | tr -d '\r\n ')"
+if [ "$DO_PUBLISH" = 1 ] && [ -n "${DTRACK_URL:-}" ] && [ -n "$DTRACK_API_KEY" ]; then
+  export DTRACK_API_KEY
   export SCHULTZ_BUILD_SUBDIR="$RB"
   export SCHULTZ_IMAGE_NAME="$IMAGE"
   export DTRACK_PROJECT_VERSION="$VERSION"
@@ -121,7 +132,7 @@ if [ "$DO_PUBLISH" = 1 ] && [ -n "${DTRACK_URL:-}" ] && [ -f "$WORK_DIR/keys/dtr
   echo "-- Dependency-Track snapshot as $VERSION --"
   "$REPO_DIR/scripts/upload-sbom.sh" || echo "DT snapshot failed (continuing archive)"
 elif [ "$DO_PUBLISH" = 1 ]; then
-  echo "no DT creds (keys/dtrack.env + keys/dtrack-api-key) -- skipping DT snapshot"
+  echo "no DT creds (keys/dtrack.env: DTRACK_URL + DTRACK_API_KEY) -- skipping DT snapshot"
 else
   echo "--no-publish: skipping DT snapshot"
 fi
