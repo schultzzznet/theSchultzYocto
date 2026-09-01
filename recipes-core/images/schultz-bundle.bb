@@ -47,7 +47,7 @@ RAUC_BUNDLE_COMPATIBLE = "theSchultzYocto-raspberrypi3-64"
 # Yocto LTS base (scarthgap). See the versioning note in docs/security-and-auditing.md.
 # Keep this in sync with IMAGE_VERSION in recipes-core/os-release/os-release.bbappend
 # (the device stamps the same CalVer into /etc/os-release).
-RAUC_BUNDLE_VERSION = "2026.07.1"
+RAUC_BUNDLE_VERSION = "2026.09.0"
 
 # Deliberately unconditional (=, not ?=). meta-rauc-community's layer.conf
 # ALSO defaults these (?=, pointing at its own public example keys) -- and all

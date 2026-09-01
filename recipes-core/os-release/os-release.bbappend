@@ -5,7 +5,7 @@
 # images" and A/B-updated -- which is exactly this RAUC setup. So the running
 # device self-reports its CalVer release via `cat /etc/os-release`, and the
 # stamp rides along with each A/B update (slot A vs B can report different
-# IMAGE_VERSIONs). The poky base (5.0.19 scarthgap) stays untouched in the
+# IMAGE_VERSIONs). The poky base (6.0.3 wrynose) stays untouched in the
 # standard VERSION / VERSION_ID fields, so nothing about the Yocto identity is
 # lost.
 #
@@ -20,4 +20,4 @@ OS_RELEASE_FIELDS:append = " IMAGE_ID IMAGE_VERSION"
 OS_RELEASE_UNQUOTED_FIELDS:append = " IMAGE_ID IMAGE_VERSION"
 
 IMAGE_ID = "theschultzyocto"
-IMAGE_VERSION = "2026.07.1"
+IMAGE_VERSION = "2026.09.0"
