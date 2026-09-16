@@ -235,7 +235,7 @@ if [ "$DO_TAG" = 1 ] && [ -d "$REPO_DIR/.git" ]; then
     echo "tag $TAG already exists -- not re-tagging"
   else
     git -C "$REPO_DIR" tag -a "$TAG" \
-      -m "theSchultzYocto $VERSION (scarthgap)" \
+      -m "theSchultzYocto $VERSION ($SCHULTZ_RELEASE, $MACHINE)" \
       -m "Signed RAUC A/B release on Yocto LTS. See $RB/releases/$VERSION/$MACHINE/PROVENANCE.txt."
     if git -C "$REPO_DIR" push origin "$TAG" 2>/dev/null; then
       echo "tagged + pushed $TAG"
