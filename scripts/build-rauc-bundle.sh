@@ -43,7 +43,8 @@ cd "$WORK_DIR"
 # shellcheck disable=SC1091
 source "$REPO_DIR/scripts/release-profile.sh"
 
-MACHINE="raspberrypi3-64"
+MACHINE="${SCHULTZ_MACHINE:-raspberrypi3-64}"
+export MACHINE
 IMAGE="schultz-image-minimal"
 BUNDLE="schultz-bundle"
 RB="$SCHULTZ_RAUC_BUILD"

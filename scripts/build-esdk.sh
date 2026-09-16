@@ -13,6 +13,10 @@
 #   ./scripts/build-esdk.sh --no-install    # build only, don't install
 #   ./scripts/build-esdk.sh [install-dir]   # default /opt/schultz-sdk
 #
+# Env: SCHULTZ_IMAGE (image to match), SCHULTZ_MACHINE (board; overrides
+#      local.conf), SCHULTZ_BUILD_DIR (build tree to cut from).
+#      cut-release.sh sets all three so the SDK matches the released image.
+#
 # WHY NOT THE eSDK BY DEFAULT (measured 2026-09-16, not assumed):
 # `populate_sdk_ext` re-runs bitbake inside a renamed copy of the build system
 # to compute a filtered task list, and that pass requires EVERY image task to
@@ -38,6 +42,13 @@ SDK_GLOB='*-toolchain-*.sh'
 DO_INSTALL=1
 SDK_INSTALL_DIR="/opt/schultz-sdk"
 IMAGE="${SCHULTZ_IMAGE:-schultz-image-minimal}"
+# Which build dir to cut the SDK from. cut-release.sh passes its RAUC build dir,
+# so the SDK's sysroot comes from the same tree as the image being released --
+# an SDK built elsewhere could match a different config and still look fine.
+BUILD_DIR="${SCHULTZ_BUILD_DIR:-$SCHULTZ_BUILD}"
+# MACHINE is in bitbake's default env passthrough, so exporting it overrides
+# local.conf without editing it -- which is how one tree serves several boards.
+[ -n "${SCHULTZ_MACHINE:-}" ] && export MACHINE="$SCHULTZ_MACHINE"
 
 for a in "$@"; do
   case "$a" in
@@ -55,14 +66,14 @@ done
 
 set +u
 # shellcheck disable=SC1091
-source "$WORK_DIR/$SCHULTZ_OE_INIT" "$WORK_DIR/$SCHULTZ_BUILD"
+source "$WORK_DIR/$SCHULTZ_OE_INIT" "$WORK_DIR/$BUILD_DIR"
 set -u
 
-echo "-- bitbake $IMAGE -c $SDK_TASK --"
+echo "-- bitbake $IMAGE -c $SDK_TASK ${MACHINE:+(MACHINE=$MACHINE)} --"
 bitbake "$IMAGE" -c "$SDK_TASK"
 
-INSTALLER="$(find "$WORK_DIR/$SCHULTZ_BUILD/tmp/deploy/sdk" -name "$SDK_GLOB" 2>/dev/null | sort | tail -1)"
-[ -n "$INSTALLER" ] || { echo "no SDK installer matching $SDK_GLOB in tmp/deploy/sdk" >&2; exit 1; }
+INSTALLER="$(find "$WORK_DIR/$BUILD_DIR/tmp/deploy/sdk" -name "$SDK_GLOB" -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -1)"
+[ -n "$INSTALLER" ] || { echo "no SDK installer matching $SDK_GLOB in $BUILD_DIR/tmp/deploy/sdk" >&2; exit 1; }
 echo "built: $INSTALLER"
 
 [ "$DO_INSTALL" = 1 ] || exit 0

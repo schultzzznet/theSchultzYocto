@@ -22,3 +22,15 @@ FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 # expecting you to "overwrite example ca.cert.pem") avoids the whole issue.
 RAUC_KEYRING_FILE = "development-1.cert.pem"
 
+# system.conf ships a literal `compatible=` so the file stays readable and
+# greppable, but the bundle derives its own from ${MACHINE} -- a mismatch means
+# the target refuses every update. Rewrite it here from the same variable so
+# one source of truth survives a change of board.
+do_install:append() {
+    f="${D}${sysconfdir}/rauc/system.conf"
+    [ -f "$f" ] || bbfatal "expected rauc system.conf at $f -- update rauc-conf.bbappend"
+    sed -i -e 's/^compatible=.*/compatible=theSchultzYocto-${MACHINE}/' "$f"
+    grep -q '^compatible=theSchultzYocto-${MACHINE}$' "$f" || \
+        bbfatal "failed to set compatible= in $f"
+}
+

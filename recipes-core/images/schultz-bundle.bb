@@ -39,7 +39,9 @@ RAUC_SLOT_rootfs[fstype] = "ext4"
 # Must equal the `compatible` in recipes-core/rauc/files/system.conf, or rauc
 # rejects the bundle on the target. Without this it defaults to
 # "${MACHINE}-${TARGET_VENDOR}" (raspberrypi3-64-poky), which would NOT match.
-RAUC_BUNDLE_COMPATIBLE = "theSchultzYocto-raspberrypi3-64"
+# Both sides derive from MACHINE now -- rauc-conf.bbappend rewrites system.conf
+# with this same expansion, so targeting a new board cannot desync them.
+RAUC_BUNDLE_COMPATIBLE = "theSchultzYocto-${MACHINE}"
 
 # Release version shown by `rauc info` (Version:). Ubuntu-style CalVer
 # YYYY.MM.PATCH: bump PATCH when re-cutting a line with fresh Yocto-LTS backports

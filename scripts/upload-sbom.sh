@@ -46,7 +46,8 @@ source "$REPO_DIR/scripts/release-profile.sh"
 # to snapshot the A/B image instead (e.g. for a dated release of what actually
 # ships to hardware). See docs/security-and-auditing.md.
 BUILD_SUBDIR="${SCHULTZ_BUILD_SUBDIR:-$SCHULTZ_BUILD}"
-MANIFEST="$WORK_DIR/$BUILD_SUBDIR/tmp/deploy/images/raspberrypi3-64/${IMAGE_NAME}-raspberrypi3-64.rootfs.manifest"
+MACHINE="${SCHULTZ_MACHINE:-raspberrypi3-64}"
+MANIFEST="$WORK_DIR/$BUILD_SUBDIR/tmp/deploy/images/$MACHINE/${IMAGE_NAME}-${MACHINE}.rootfs.manifest"
 
 if [ ! -f "$MANIFEST" ]; then
   echo "No manifest at $MANIFEST -- build ${IMAGE_NAME} first." >&2
@@ -55,8 +56,8 @@ fi
 
 # scarthgap's cve-check and wrynose's sbom-cve-check write the same
 # `package[].issue[]` structure to different paths; the profile knows which.
-CVE_SUMMARY="$(schultz_cve_report "$WORK_DIR" "$BUILD_SUBDIR" "$IMAGE_NAME")"
-PKGDATA_DIR="$WORK_DIR/$BUILD_SUBDIR/tmp/pkgdata/raspberrypi3-64/runtime-reverse"
+CVE_SUMMARY="$(schultz_cve_report "$WORK_DIR" "$BUILD_SUBDIR" "$IMAGE_NAME" "$MACHINE")"
+PKGDATA_DIR="$WORK_DIR/$BUILD_SUBDIR/tmp/pkgdata/$MACHINE/runtime-reverse"
 
 SBOM_CDX="$(mktemp /tmp/schultz-sbom-XXXXXX.cdx.json)"
 VEX_CDX="$(mktemp /tmp/schultz-vex-XXXXXX.cdx.json)"

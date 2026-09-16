@@ -96,7 +96,7 @@ The single most useful thing to know in an incident.
 
 | Data | Where the master lives | If lost |
 |---|---|---|
-| **Release artifacts** (bundles, images, PROVENANCE) | `rpi5g16nvme:~/build-rauc/releases/<ver>/` | Re-publish to Nexus — this is what saved us on 2026-08-30 |
+| **Release artifacts** (bundles, images, SDK, PROVENANCE) | `rpi5g16nvme:~/build-rauc/releases/<ver>/<machine>/` | Re-publish to Nexus — this is what saved us on 2026-08-30 |
 | **Signing keys** | gitignored `keys/` beside the repo | **Unrecoverable.** Devices trust that cert |
 | **SBOM/VEX audit trail** | `rpi5g16nvme:~/build/sbom-archive/` | Unrecoverable history (GAPS I-6 — it sits in *scarthgap's* dir) |
 | Source mirror | Nexus, refilled from `~/yocto-downloads` | Re-push (~3.5 min, 19 GB) |

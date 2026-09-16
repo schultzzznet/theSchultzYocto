@@ -3,7 +3,7 @@
 #
 # Default (Nexus): the device pulls the signed bundle straight from the release
 # artifact repo and STREAMS it into its inactive A/B slot:
-#   rauc install http://<nexus>/repository/schultz-releases-raw/theSchultzYocto/<v>/schultz-bundle-<v>.raucb
+#   rauc install http://<nexus>/repository/schultz-releases-raw/theSchultzYocto/<v>/<machine>/schultz-bundle-<v>.raucb
 # Nexus honours HTTP range requests, so nothing is copied to the device's disk.
 #
 # --local: this build host instead serves the release over an ephemeral HTTP
@@ -22,7 +22,8 @@
 #     --local    force the ephemeral local HTTP server instead of Nexus
 #
 # Env: NEXUS_URL (default from keys/nexus.env, else http://MacStudioM2Max12.local:8081),
-#      NEXUS_REPO (default schultz-releases-raw), OTA_HTTP_PORT (default 8099, --local).
+#      NEXUS_REPO (default schultz-releases-raw), OTA_HTTP_PORT (default 8099, --local),
+#      SCHULTZ_MACHINE (default raspberrypi3-64) -- which board's bundle to deploy.
 
 set -uo pipefail
 
@@ -47,6 +48,12 @@ REL_ROOT="$WORK_DIR/$SCHULTZ_RAUC_BUILD/releases"
 # Variant-aware bundle filename: SCHULTZ_BUNDLE_BASENAME defaults to the standard
 # bundle; set it to schultz-bundle-hardened for the hardened flavour.
 BUNDLE_NAME="${SCHULTZ_BUNDLE_BASENAME:-schultz-bundle}-$VERSION.raucb"
+
+# Releases are archived under <version>/<machine>/ so several boards can share a
+# version. Releases cut before that are flat, so try the specific path first and
+# fall back -- otherwise this stops finding everything already published.
+MACHINE="${SCHULTZ_MACHINE:-raspberrypi3-64}"
+REL_SUBS=("$VERSION/$MACHINE" "$VERSION")
 
 # ssh opts as an array so word-splitting is explicit (device = root, empty pw).
 SSH=(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10)
@@ -101,8 +108,12 @@ if [ "$LOCAL" = 0 ]; then
   fi
   NEXUS_URL_EFF="${NEXUS_URL_EFF:-http://MacStudioM2Max12.local:8081}"
   NREPO="${NEXUS_REPO:-schultz-releases-raw}"
-  NEXUS_BUNDLE_URL="$NEXUS_URL_EFF/repository/$NREPO/theSchultzYocto/$VERSION/$BUNDLE_NAME"
-  if curl -sfI -o /dev/null "$NEXUS_BUNDLE_URL"; then
+  NEXUS_BUNDLE_URL=""
+  for sub in "${REL_SUBS[@]}"; do
+    u="$NEXUS_URL_EFF/repository/$NREPO/theSchultzYocto/$sub/$BUNDLE_NAME"
+    if curl -sfI -o /dev/null "$u"; then NEXUS_BUNDLE_URL="$u"; break; fi
+  done
+  if [ -n "$NEXUS_BUNDLE_URL" ]; then
     DEV_URL="$(resolve_url_for_device "$NEXUS_BUNDLE_URL")"
     echo ">>> source: Nexus  ->  $DEV_URL"
     show_before
@@ -113,20 +124,24 @@ if [ "$LOCAL" = 0 ]; then
     echo ">>> OTA of $VERSION -> $TARGET complete via Nexus (old slot kept as rollback)."
     exit 0
   fi
-  echo ">>> $VERSION not in Nexus ($NEXUS_BUNDLE_URL); falling back to --local." >&2
+  echo ">>> $VERSION not in Nexus for $MACHINE; falling back to --local." >&2
   LOCAL=1
 fi
 
 # ---- --local: serve the release from this host over an ephemeral HTTP server ----
-[ -f "$REL_ROOT/$VERSION/$BUNDLE_NAME" ] || { echo "no bundle for $VERSION at $REL_ROOT/$VERSION/$BUNDLE_NAME -- run cut-release.sh first" >&2; exit 1; }
+REL_SUB=""
+for sub in "${REL_SUBS[@]}"; do
+  [ -f "$REL_ROOT/$sub/$BUNDLE_NAME" ] && { REL_SUB="$sub"; break; }
+done
+[ -n "$REL_SUB" ] || { echo "no $MACHINE bundle for $VERSION under $REL_ROOT/$VERSION -- run cut-release.sh first" >&2; exit 1; }
 HOST_IP="$(ip route get "$DEVICE_HOST" 2>/dev/null | grep -oE 'src [0-9.]+' | awk '{print $2}')"
 [ -n "$HOST_IP" ] || HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 PORT="${OTA_HTTP_PORT:-8099}"
-URL="http://$HOST_IP:$PORT/$VERSION/$BUNDLE_NAME"
+URL="http://$HOST_IP:$PORT/$REL_SUB/$BUNDLE_NAME"
 python3 -m http.server "$PORT" --directory "$REL_ROOT" --bind 0.0.0.0 >/dev/null 2>&1 &
 HTTP_PID=$!
 trap 'kill "$HTTP_PID" 2>/dev/null' EXIT
-curl --retry 20 --retry-delay 1 --retry-all-errors -sfo /dev/null "http://127.0.0.1:$PORT/$VERSION/" \
+curl --retry 20 --retry-delay 1 --retry-all-errors -sfo /dev/null "http://127.0.0.1:$PORT/$REL_SUB/" \
   || { echo "local HTTP server did not come up on :$PORT" >&2; exit 1; }
 echo ">>> source: local ephemeral server  ->  $URL"
 show_before

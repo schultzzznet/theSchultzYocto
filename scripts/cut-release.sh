@@ -13,14 +13,18 @@
 #   4. verify                    -- rauc info Version == release + valid signature
 #   5. Dependency-Track snapshot -- upload-sbom.sh on that A/B image,
 #                                   as an immutable DT project version <version>
-#   6. archive                   -- bundle + image + SBOM + VEX + PROVENANCE.txt
-#                                   under <rauc build dir>/releases/<version>/
+#   6. archive                   -- bundle + image + SDK + SBOM + VEX + PROVENANCE.txt
+#                                   under <rauc build dir>/releases/<version>/<machine>/
 #   7. git tag v<version>        -- annotated; pushed to origin (best-effort)
 #
-# Options:  --no-build  --no-tag  --no-pull  --no-publish  [VERSION-override]
+# Options:  --no-build  --no-tag  --no-pull  --no-publish  --no-sdk  [VERSION-override]
 # Variant builds (env; default = the standard bundle/image):
 #   SCHULTZ_BUNDLE=schultz-bundle-hardened SCHULTZ_IMAGE=schultz-image-hardened \
 #     scripts/cut-release.sh --no-tag --no-publish   # build-verify a variant
+# Target board (env; default raspberrypi3-64). `raspberrypi-armv8` is the
+# generic 64-bit Pi machine -- cortex-a53 tune, every Pi 3/4/5/Zero-2W/CM
+# device tree in one image -- so one release runs on all of them:
+#   SCHULTZ_MACHINE=raspberrypi-armv8 scripts/cut-release.sh
 # Idempotent: re-running a version re-snapshots DT + re-archives and skips an
 # already-existing tag.
 
@@ -35,7 +39,7 @@ WORK_DIR="$(dirname "$REPO_DIR")"
 # shellcheck disable=SC1091
 source "$REPO_DIR/scripts/release-profile.sh"
 
-MACHINE="raspberrypi3-64"
+MACHINE="${SCHULTZ_MACHINE:-raspberrypi3-64}"
 # Variant-aware: default is the standard bundle/image; override via env to cut a
 # variant (e.g. the hardened squashfs bundle) through this same pipeline.
 IMAGE="${SCHULTZ_IMAGE:-schultz-image-minimal}"
@@ -43,13 +47,14 @@ BUNDLE="${SCHULTZ_BUNDLE:-schultz-bundle}"
 RB="$SCHULTZ_RAUC_BUILD"
 IMAGES_DIR="$WORK_DIR/$RB/tmp/deploy/images/$MACHINE"
 
-DO_BUILD=1 DO_TAG=1 DO_PULL=1 DO_PUBLISH=1 VERSION_OVERRIDE=""
+DO_BUILD=1 DO_TAG=1 DO_PULL=1 DO_PUBLISH=1 DO_SDK=1 VERSION_OVERRIDE=""
 for a in "$@"; do
   case "$a" in
     --no-build)   DO_BUILD=0 ;;
     --no-tag)     DO_TAG=0 ;;
     --no-pull)    DO_PULL=0 ;;
     --no-publish) DO_PUBLISH=0 ;;
+    --no-sdk)     DO_SDK=0 ;;
     -*) echo "unknown option: $a" >&2; exit 2 ;;
     *)  VERSION_OVERRIDE="$a" ;;
   esac
@@ -74,7 +79,12 @@ VERSION="${VERSION_OVERRIDE:-$BUNDLE_VER}"
 if [ -n "$IMAGE_VER" ] && [ "$IMAGE_VER" != "${VERSION%%-*}" ]; then
   echo "WARNING: os-release IMAGE_VERSION ($IMAGE_VER) != release (${VERSION%%-*}); bump both to match." >&2
 fi
-echo "==== cutting release $VERSION ($SCHULTZ_RELEASE) ===="
+echo "==== cutting release $VERSION ($SCHULTZ_RELEASE) -- $MACHINE ===="
+
+# Every path above is built from $MACHINE, so bitbake has to agree with them.
+# MACHINE is in bitbake's default env passthrough, so exporting it overrides
+# local.conf without editing it.
+export MACHINE
 
 # oe-init-build-env is not set -u safe.
 set +u
@@ -109,8 +119,13 @@ if [ -x "$RN" ] && [ -n "$CT" ]; then
 fi
 
 # 5 + 6. Dependency-Track snapshot + archive of the A/B image.
-R="$WORK_DIR/$RB/releases/$VERSION"
+# Artifacts live under <version>/<machine>/: the bundle and image names carry no
+# machine, so a flat directory let a second board overwrite the first's -- and on
+# Nexus (immutable) the upload was SKIPPED instead, leaving that URL serving the
+# other board's bundle while the log said published.
+R="$WORK_DIR/$RB/releases/$VERSION/$MACHINE"
 mkdir -p "$R"
+
 [ -f "$WORK_DIR/keys/dtrack.env" ] && { set -a; . "$WORK_DIR/keys/dtrack.env"; set +a; }
 # The key comes from keys/dtrack.env like everywhere else. The standalone
 # keys/dtrack-api-key file is a legacy fallback ONLY: this script used to read
@@ -127,6 +142,7 @@ if [ "$DO_PUBLISH" = 1 ] && [ -n "${DTRACK_URL:-}" ] && [ -n "$DTRACK_API_KEY" ]
   export DTRACK_API_KEY
   export SCHULTZ_BUILD_SUBDIR="$RB"
   export SCHULTZ_IMAGE_NAME="$IMAGE"
+  export SCHULTZ_MACHINE="$MACHINE"
   export DTRACK_PROJECT_VERSION="$VERSION"
   export SBOM_ARCHIVE_DIR="$R"
   echo "-- Dependency-Track snapshot as $VERSION --"
@@ -142,6 +158,34 @@ for ext in wic.gz wic.bz2 squashfs; do
   SRC="$IMAGES_DIR/${IMAGE}-${MACHINE}.rootfs.$ext"
   [ -f "$SRC" ] && { cp -Lf "$SRC" "$R/schultz-ab-image-${VERSION}.$ext"; break; }
 done
+
+# 6a. SDK, archived next to the image it was built from.
+#
+# The SDK's entire value is that its sysroot matches the image byte-for-byte. An
+# SDK that outlives the image it was cut against is worse than none: it still
+# compiles, and the mismatch only surfaces as a runtime linker error on the
+# device. Versioning it here is what stops that -- the toolchain cannot drift
+# from the release when they are produced by the same command.
+# Non-fatal: a missing SDK must never fail a release whose bundle is already
+# verified and signed.
+if [ "$DO_SDK" = 1 ]; then
+  echo "-- SDK for $MACHINE --"
+  if SCHULTZ_IMAGE="$IMAGE" SCHULTZ_MACHINE="$MACHINE" SCHULTZ_BUILD_DIR="$RB" \
+       "$REPO_DIR/scripts/build-esdk.sh" --no-install; then
+    SDK_SH="$(find "$WORK_DIR/$RB/tmp/deploy/sdk" -name '*-toolchain-*.sh' -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -1)"
+    if [ -n "$SDK_SH" ]; then
+      cp -Lf "$SDK_SH" "$R/schultz-sdk-${VERSION}-${MACHINE}.sh"
+      echo "   archived $(basename "$SDK_SH") -> schultz-sdk-${VERSION}-${MACHINE}.sh"
+    else
+      echo "   no SDK installer found under $RB/tmp/deploy/sdk -- skipping" >&2
+    fi
+  else
+    echo "   SDK build failed -- continuing (the bundle is already verified)" >&2
+  fi
+else
+  echo "--no-sdk: skipping SDK"
+fi
+
 {
   echo "theSchultzYocto -- release $VERSION ($SCHULTZ_RELEASE) -- $MACHINE"
   echo "Ubuntu-style CalVer; built on Yocto $(read_var "$WORK_DIR/$SCHULTZ_DISTRO_CONF" DISTRO_VERSION) $SCHULTZ_RELEASE (LTS)."
@@ -153,7 +197,7 @@ done
   echo
   echo "rauc bundle Version: $VERSION"
   echo "Artifacts (sha256):"
-  (cd "$R" && sha256sum ./*.raucb ./*.wic.* ./*.squashfs 2>/dev/null)
+  (cd "$R" && sha256sum ./*.raucb ./*.wic.* ./*.squashfs ./*sdk*.sh 2>/dev/null)
 } > "$R/PROVENANCE.txt"
 echo "archived -> $R"
 
@@ -165,7 +209,7 @@ echo "archived -> $R"
 [ -f "$WORK_DIR/keys/nexus.env" ] && { set -a; . "$WORK_DIR/keys/nexus.env"; set +a; }
 if [ "$DO_PUBLISH" = 1 ] && [ -n "${NEXUS_URL:-}" ] && [ -n "${NEXUS_WRITE_USER:-}" ] && [ -n "${NEXUS_WRITE_PASS:-}" ]; then
   NREPO="${NEXUS_REPO:-schultz-releases-raw}"
-  NBASE="$NEXUS_URL/repository/$NREPO/theSchultzYocto/$VERSION"
+  NBASE="$NEXUS_URL/repository/$NREPO/theSchultzYocto/$VERSION/$MACHINE"
   echo "-- publishing to Nexus: $NBASE --"
   for f in "$R"/*; do
     n="$(basename "$f")"
@@ -192,7 +236,7 @@ if [ "$DO_TAG" = 1 ] && [ -d "$REPO_DIR/.git" ]; then
   else
     git -C "$REPO_DIR" tag -a "$TAG" \
       -m "theSchultzYocto $VERSION (scarthgap)" \
-      -m "Signed RAUC A/B release on Yocto LTS. See $RB/releases/$VERSION/PROVENANCE.txt."
+      -m "Signed RAUC A/B release on Yocto LTS. See $RB/releases/$VERSION/$MACHINE/PROVENANCE.txt."
     if git -C "$REPO_DIR" push origin "$TAG" 2>/dev/null; then
       echo "tagged + pushed $TAG"
     else

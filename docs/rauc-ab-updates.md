@@ -98,7 +98,7 @@ flowchart LR
   ```
   It git-pulls, builds the A/B image + signed bundle, verifies `rauc info` matches
   the version, snapshots the SBOM+VEX to Dependency-Track, archives
-  bundle+image+SBOM+VEX+`PROVENANCE.txt` under `<rauc build dir>/releases/<version>/`,
+  bundle+image+SDK+SBOM+VEX+`PROVENANCE.txt` under `<rauc build dir>/releases/<version>/<machine>/`,
   **publishes them to the Nexus raw repo**, and tags `v<version>`.
 - **Deploy it over the air** —
   ```sh
