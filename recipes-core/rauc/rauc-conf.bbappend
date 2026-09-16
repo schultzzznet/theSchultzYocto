@@ -26,11 +26,21 @@ RAUC_KEYRING_FILE = "development-1.cert.pem"
 # greppable, but the bundle derives its own from ${MACHINE} -- a mismatch means
 # the target refuses every update. Rewrite it here from the same variable so
 # one source of truth survives a change of board.
+# Both locations are checked on purpose: meta-rauc installs to
+# ${nonarch_libdir}/rauc (/usr/lib/rauc) on wrynose, and this repo still builds
+# the scarthgap line, where older meta-rauc used ${sysconfdir}/rauc.
 do_install:append() {
-    f="${D}${sysconfdir}/rauc/system.conf"
-    [ -f "$f" ] || bbfatal "expected rauc system.conf at $f -- update rauc-conf.bbappend"
-    sed -i -e 's/^compatible=.*/compatible=theSchultzYocto-${MACHINE}/' "$f"
-    grep -q '^compatible=theSchultzYocto-${MACHINE}$' "$f" || \
-        bbfatal "failed to set compatible= in $f"
+    found=0
+    for f in "${D}${nonarch_libdir}/rauc/system.conf" "${D}${sysconfdir}/rauc/system.conf"; do
+        if [ -f "$f" ]; then
+            sed -i -e 's/^compatible=.*/compatible=theSchultzYocto-${MACHINE}/' "$f"
+            grep -q '^compatible=theSchultzYocto-${MACHINE}$' "$f" || \
+                bbfatal "failed to set compatible= in $f"
+            found=1
+        fi
+    done
+    if [ "$found" = 0 ]; then
+        bbfatal "no rauc system.conf under ${D}${nonarch_libdir}/rauc or ${D}${sysconfdir}/rauc -- meta-rauc moved it; update rauc-conf.bbappend"
+    fi
 }
 
