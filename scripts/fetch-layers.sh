@@ -58,6 +58,15 @@ clone_or_update https://git.openembedded.org/bitbake            "$BITBAKE_BRANCH
 clone_or_update https://git.yoctoproject.org/meta-yocto         "$BRANCH"
 clone_or_update https://git.yoctoproject.org/meta-raspberrypi   "$BRANCH" "$SCHULTZ_LAYER_DIR/meta-raspberrypi"
 clone_or_update https://github.com/rauc/meta-rauc.git           "$BRANCH" "$SCHULTZ_LAYER_DIR/meta-rauc"
+# meta-openembedded is one repo containing many layers; we use meta-oe,
+# meta-python and meta-multimedia. Not optional any more:
+#   - libcamera (Pi camera userspace) lives in meta-raspberrypi's
+#     dynamic-layers/multimedia-layer/, which only activates when meta-multimedia
+#     is present. Without it the camera enumerates but nothing can capture.
+#   - python3-pyserial lives in meta-python. Its absence is why the mower's
+#     serial-link recipes had to drop their RDEPENDS.
+# Same per-release directory rule as the BSP layers above.
+clone_or_update https://git.openembedded.org/meta-openembedded  "$BRANCH" "$SCHULTZ_LAYER_DIR/meta-openembedded"
 
 "$REPO_DIR/scripts/generate-signing-keys.sh"
 
