@@ -40,6 +40,35 @@ schultz_set_hostname() {
 }
 ROOTFS_POSTPROCESS_COMMAND += "schultz_set_hostname;"
 
+# --- Stamp the artefact filename with what it actually is --------------------
+# The default is <image>-<machine>.rootfs-<distro>, identical for every build
+# ever made. Six images came out of 2026-09-18 and telling them apart meant
+# renaming files by hand on the way to the SD card.
+#
+# Now <hostname>-<machine>-<distro>-<gitrev>.rootfs, so a .wic.gz in a Downloads
+# folder or already written to a card can be traced to a commit without booting
+# it. "-dirty" is appended when the build tree has uncommitted changes --
+# without it the stamp would lie in exactly the case where it matters most.
+#
+# THISDIR is the dir of the recipe being parsed, so an image defined in another
+# layer stamps THAT layer's revision, which is the useful one.
+#
+# IMAGE_LINK_NAME is deliberately NOT touched. cut-release.sh:158 and
+# upload-sbom.sh:50 both look up "${IMAGE}-${MACHINE}.rootfs.<ext>", which is the
+# link name -- checked before making this change, and they keep working.
+def schultz_git_rev(d):
+    import bb.process
+    try:
+        rev, _ = bb.process.run('git rev-parse --short HEAD', cwd=d.getVar('THISDIR'))
+        rev = rev.strip()
+        dirty, _ = bb.process.run('git status --porcelain', cwd=d.getVar('THISDIR'))
+        return rev + ('-dirty' if dirty.strip() else '')
+    except Exception:
+        return 'nogit'
+
+SCHULTZ_GIT_REV ?= "${@schultz_git_rev(d)}"
+IMAGE_NAME = "${SCHULTZ_HOSTNAME}-${MACHINE}-${DISTRO_VERSION}-${SCHULTZ_GIT_REV}${IMAGE_NAME_SUFFIX}"
+
 # nano/htop would be nice but live in meta-openembedded (meta-oe), which
 # isn't one of our layers -- build failed with "Nothing RPROVIDES 'nano'"
 # when this tried IMAGE_INSTALL:append = " nano htop". busybox (already in
