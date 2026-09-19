@@ -7,10 +7,24 @@
 
 # Signing key material -- never commit private keys/passphrases.
 /keys/
+*.key.pem
+*-key.pem
+*.p12
 
 # PlatformIO build artifacts + real WiFi credentials
 tools/esp32-serial-bridge/.pio/
 tools/esp32-serial-bridge/include/secrets.h
+
+# Device credentials, wherever they land. A PSK is all anyone needs to join the
+# network, and a file that exists in a working tree eventually gets committed.
+# These belong on a device's /data, or on its boot partition for exactly one
+# boot -- never in a repo. Named broadly on purpose: a guard that only catches
+# the spelling you thought of is not a guard.
+wifi.conf
+.wifi.conf
+wpa_supplicant*.conf
+*.psk
+secrets/
 
 # Editor/OS cruft
 .DS_Store

@@ -69,6 +69,21 @@ def schultz_git_rev(d):
 SCHULTZ_GIT_REV ?= "${@schultz_git_rev(d)}"
 IMAGE_NAME = "${SCHULTZ_HOSTNAME}-${MACHINE}-${DISTRO_VERSION}-${SCHULTZ_GIT_REV}${IMAGE_NAME_SUFFIX}"
 
+# The revision NAMES the artefact; it does not change its contents, so it must
+# not take part in task signatures. Without these two lines bitbake computes a
+# basehash for do_image_* at first parse, gets a different one when the worker
+# reparses after the rev changes, and fails the whole build with 164 copies of
+#   "the basehash value changed ... metadata is not deterministic"
+# while still producing a correct image -- exit 1 with the artefact sitting
+# there, which is the worst of both. Hit 2026-09-19 the first time a build
+# spanned a commit (dirty -> clean).
+#
+# Same treatment oe-core gives DATETIME in its own IMAGE_NAME, and for the same
+# reason: a stamp that is allowed to vary per build cannot be allowed to
+# invalidate the build.
+SCHULTZ_GIT_REV[vardepvalue] = "fixed"
+IMAGE_NAME[vardepsexclude] += "SCHULTZ_GIT_REV"
+
 # nano/htop would be nice but live in meta-openembedded (meta-oe), which
 # isn't one of our layers -- build failed with "Nothing RPROVIDES 'nano'"
 # when this tried IMAGE_INSTALL:append = " nano htop". busybox (already in
