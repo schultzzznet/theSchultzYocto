@@ -156,7 +156,23 @@ fi
 cp -Lf "$RAUCB" "$R/${BUNDLE}-${VERSION}.raucb"
 for ext in wic.gz wic.bz2 squashfs; do
   SRC="$IMAGES_DIR/${IMAGE}-${MACHINE}.rootfs.$ext"
-  [ -f "$SRC" ] && { cp -Lf "$SRC" "$R/schultz-ab-image-${VERSION}.$ext"; break; }
+  [ -f "$SRC" ] || continue
+  # IMAGE_LINK_NAME never carries the stamp, so resolve the link to see what was
+  # actually built. An image built with ROVER_WIFI_BAKED_CONF contains a WiFi
+  # credential in its rootfs; this path archives to Nexus and pushes an SBOM to
+  # Dependency-Track, and a credential that reaches an artefact store cannot be
+  # retracted -- you rotate the network instead. Refuse rather than warn.
+  REAL="$(readlink -f "$SRC")"
+  case "$(basename "$REAL")" in
+    *wifibaked*)
+      echo "REFUSING to release $(basename "$REAL")" >&2
+      echo "  That image has a WiFi credential baked into its rootfs." >&2
+      echo "  Rebuild without ROVER_WIFI_BAKED_CONF before cutting a release." >&2
+      exit 1
+      ;;
+  esac
+  cp -Lf "$SRC" "$R/schultz-ab-image-${VERSION}.$ext"
+  break
 done
 
 # 6a. SDK, archived next to the image it was built from.
