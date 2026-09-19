@@ -89,3 +89,46 @@ IMAGE_NAME[vardepsexclude] += "SCHULTZ_GIT_REV"
 # when this tried IMAGE_INSTALL:append = " nano htop". busybox (already in
 # core-image-minimal) provides `vi` and `top` in the meantime. Add
 # meta-openembedded as a layer if you want the real things.
+
+# --- ADR-0015: the image is immutable, state lives on /data ------------------
+# Four things wrote to the rootfs, found by diffing a booted board against the
+# built image rather than by reading recipes:
+#
+#   /etc/ssh/ssh_host_*              absent from the image, made at first boot
+#   /etc/machine-id                  0 bytes in the image, filled by systemd
+#   /var/lib/systemd/timesync/clock  rewritten PERIODICALLY -- the risky one
+#   /etc/resolv.conf                 symlink into /etc, written on lease
+#
+# schultz-persistent-state binds the first and third from /data. machine-id is
+# deliberately left transient: systemd reads it as PID 1, before any unit could
+# bind over it, so fleet identity must come from the SoC serial
+# (/proc/device-tree/serial-number) instead -- which also survives a reflash.
+IMAGE_INSTALL:append = " schultz-persistent-state"
+
+# The bind mount hides whatever the image shipped in /etc/ssh, so sshd's config
+# is stashed where the boot script can copy it back. Done here rather than in
+# the recipe because only the image can see another package's files.
+schultz_stash_ssh_config() {
+    if [ -d ${IMAGE_ROOTFS}${sysconfdir}/ssh ]; then
+        mkdir -p ${IMAGE_ROOTFS}${datadir}/schultz-state/ssh
+        for f in ${IMAGE_ROOTFS}${sysconfdir}/ssh/*; do
+            [ -f "$f" ] || continue
+            cp -a "$f" ${IMAGE_ROOTFS}${datadir}/schultz-state/ssh/
+        done
+    fi
+}
+ROOTFS_POSTPROCESS_COMMAND += "schultz_stash_ssh_config;"
+
+# squashfs is what makes the image immutable rather than merely asked not to be
+# written, and it compresses, which shrinks the RAUC bundle too. Built
+# unconditionally: cut-release.sh has looked for this artefact since it was
+# written and has never once found it.
+IMAGE_FSTYPES += "squashfs"
+
+# Flipping the rootfs read-only is deliberately a separate switch from shipping
+# the mechanism above. Turn it on only once a board has been seen to keep its
+# ssh host keys across a reflash -- otherwise a failure to persist state and a
+# failure to boot read-only are indistinguishable, and you debug both at once.
+SCHULTZ_READ_ONLY_ROOTFS ?= "0"
+IMAGE_FEATURES += "${@bb.utils.contains('SCHULTZ_READ_ONLY_ROOTFS', '1', 'read-only-rootfs', '', d)}"
+

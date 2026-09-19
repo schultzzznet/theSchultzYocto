@@ -1,0 +1,17 @@
+[Unit]
+Description=Bind per-device state from /data over the read-only rootfs
+DefaultDependencies=no
+# /data must be mounted, and this has to win the race against every service
+# that would otherwise write to the rootfs.
+RequiresMountsFor=/data
+After=local-fs.target
+Before=sshd.service systemd-timesyncd.service sysinit.target
+ConditionPathIsDirectory=/data
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/schultz-persistent-state
+
+[Install]
+WantedBy=sysinit.target
