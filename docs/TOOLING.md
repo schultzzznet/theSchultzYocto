@@ -81,13 +81,23 @@ hardened variant only. `DISTRO = "poky"` is the stock reference distro; a
 custom `DISTRO` would let us remove poky's own opinionated defaults, but it's
 extra maintenance for no current gain.
 
-**The release-pin decision** — we track `scarthgap` (5.0 LTS, supported into
-April 2028) rather than the newest release, for a concrete reason: the Yocto
-version we can actually build is gated by *all* the layers agreeing on a
-codename, and `meta-raspberrypi` only tracks LTS releases. In practice this
-means we're always on the newest LTS the Pi BSP supports. The trigger script in
-[README.md](../README.md) queries the actual git remotes, not the wiki, so
-"wrynose branch present on all three layers" is when we bump.
+**The release-pin decision** — we track the newest **LTS** the Pi BSP supports,
+not the newest release, for a concrete reason: the Yocto version we can actually
+build is gated by *all* the layers agreeing on a codename, and
+`meta-raspberrypi` only tracks LTS releases. That is currently `wrynose`
+(**6.0 LTS**), cut over from `scarthgap` on 2026-08-30.
+
+**The interim releases are not for us.** Yocto ships an LTS every two years
+(4.0 kirkstone, 5.0 scarthgap, 6.0 wrynose) and non-LTS releases in between
+(6.1, 6.2 …). Announcements of those — including milestone builds like
+`yocto-6.1_M3` — need no action here: `meta-raspberrypi` will not carry them, so
+they are structurally unavailable, and a milestone is a pre-release in any case.
+What *does* matter is **6.0 point releases**, which
+[daily-security-scan.sh](../scripts/daily-security-scan.sh) already pulls.
+
+The trigger script in [README.md](../README.md) queries the actual git remotes,
+not the wiki, so "the next LTS codename is present on all layers" is when we
+bump again.
 
 ---
 

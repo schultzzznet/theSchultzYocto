@@ -91,11 +91,15 @@ re-classified (disputed, not-applicable) would keep nagging. That gap is what
 [daily-security-scan.sh](../scripts/daily-security-scan.sh) closes:
 
 1. `git pull --ff-only` — pick up recipe changes pushed from the workstation.
-1b. **Track the Yocto LTS branch** — ff-only pull `scarthgap` point-releases on
-   `poky`/`meta-raspberrypi`/`meta-rauc` so the image actually receives LTS CVE
-   backports (otherwise cve-check keeps flagging CVEs that LTS already fixed).
-   Only layers on the `scarthgap` branch are pulled, so the pinned
-   `meta-rauc-community` stays frozen. `SCHULTZ_UPDATE_LTS_LAYERS=0` freezes all.
+1b. **Track the Yocto LTS branch** — ff-only pull point-releases for whichever
+   release `$SCHULTZ_RELEASE` selects (`wrynose` by default, per
+   [release-profile.sh](../scripts/release-profile.sh)), so the image actually
+   receives LTS CVE backports (otherwise cve-check keeps flagging CVEs that LTS
+   already fixed). Only layers already on that release branch are pulled, so the
+   pinned `meta-rauc-community` stays frozen. `SCHULTZ_UPDATE_LTS_LAYERS=0`
+   freezes all. Note the layer set changed with wrynose: the `poky` convenience
+   bundle was retired after scarthgap, so this now tracks `openembedded-core`,
+   `bitbake` and `meta-yocto` separately alongside `meta-raspberrypi`/`meta-rauc`.
 2. `bitbake schultz-image-minimal` — refresh the CVE database
    (`cve-update-db`), re-run cve-check, and regenerate the `.manifest`,
    `cve-summary.json` and `pkgdata` the SBOM/VEX are built from.
