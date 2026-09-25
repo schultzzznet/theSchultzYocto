@@ -101,7 +101,7 @@ The single most useful thing to know in an incident.
 | Data | Where the master lives | If lost |
 |---|---|---|
 | **Release artifacts** (bundles, images, SDK, PROVENANCE) | `rpi5g16nvme:~/build-rauc/releases/<ver>/<machine>/` | Re-publish to Nexus — this is what saved us on 2026-08-30 |
-| **Signing keys** | gitignored `keys/` beside the repo | **Unrecoverable.** Devices trust that cert |
+| **Signing keys** | gitignored `keys/` beside the repo + `~/.gnupg` on the build host | **Unrecoverable** (devices trust that cert), so backed up: age-encrypted nightly to an offline identity (Mac `~/.config/age/signing-keys-recovery.txt` + password manager) → MinIO `signing-keys` → Synology. Restore drill: `make -C the-docker-swarm-ai/infra/k3s verify-signing-key-backup` |
 | **SBOM/VEX audit trail** | `rpi5g16nvme:~/build/sbom-archive/` | Unrecoverable history (GAPS I-6 — it sits in *scarthgap's* dir) |
 | Source mirror | Nexus, refilled from `~/yocto-downloads` | Re-push (~3.5 min, 19 GB) |
 | sstate | `rpi5g16nvme:~/yocto-sstate` (also what `:8687` serves) | Rebuildable, slowly |
