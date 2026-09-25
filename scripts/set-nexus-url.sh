@@ -47,7 +47,7 @@ fi
 curl -fsS -o /dev/null "$NEW/service/rest/v1/status/writable"
 echo "  ok    $NEW is writable, reached from $(hostname)"
 
-# Prove a real download from the source mirror. (yocto-sstate-raw was always empty;
+# Prove a real download from the source mirror. (sstate left Nexus 2026-08-30, GAPS I-7;
 # sstate is served by the build host itself - scripts/setup-sstate-server.sh.)
 repo=yocto-sources-raw
 obj="$(curl -fsS "$NEW/service/rest/v1/assets?repository=$repo" |

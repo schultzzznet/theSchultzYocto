@@ -131,8 +131,8 @@ theSchultzYocto/                  <- this repo == the "schultz" layer
 │   ├── pentest-scan.sh           <- run nmap/ssh-audit/testssl/lynis/checksec/kernel checks
 │   ├── upload-pentest.sh         <- push pen-test findings + a DT mirror to DefectDojo
 │   ├── setup-pentest-tools.sh    <- install the pen-test toolchain on the build host
-│   ├── setup-nexus-mirror.sh     <- create the Nexus raw repos (sstate/source mirror + releases)
-│   ├── populate-nexus-mirror.sh  <- runs ON the build host: fill those mirrors from downloads/ + sstate-cache/
+│   ├── setup-nexus-mirror.sh     <- create the Nexus raw repos (source mirror + releases)
+│   ├── populate-nexus-mirror.sh  <- runs ON the build host (nightly): fill the source mirror from downloads/
 │   ├── setup-hashserv.sh         <- runs ON the build host: shared hash-equivalence server for the sstate mirror
 │   ├── setup-sstate-server.sh    <- run from the Mac: serves the build host's sstate read-only on :8687
 │   ├── probe-sstate-mirror.sh    <- runs ON a build host: empty-cache build must restore from the mirror

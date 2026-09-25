@@ -4,8 +4,8 @@
 #
 #   ./scripts/setup-sstate-server.sh [ssh-host]        (default rpi5g16nvme)
 #
-# Why not the Nexus yocto-sstate-raw repo: nothing ever called populate-nexus-mirror.sh,
-# so that repo was empty for its whole life. Serving the cache in place has no upload
+# Why not the Nexus yocto-sstate-raw repo: pushing sstate there filled the blob store
+# (2026-08-30, GAPS I-7), so the nightly stopped and the repo went empty. Serving in place has no upload
 # step to forget, costs no second copy, and is always current. Consumers set:
 #   SSTATE_MIRRORS = "file://.* http://<host>:8687/PATH;downloadfilename=PATH"
 #   BB_HASHSERVE   = "<host>:8686"

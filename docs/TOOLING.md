@@ -201,10 +201,10 @@ with the full explanation in the comment.
 
 | Status | Tool | Why this / not this |
 |---|---|---|
-| **In use** | **Nexus Repository CE** (raw repos: `yocto-sources-raw`, `yocto-sstate-raw`, `schultz-releases-raw`) | Serves three distinct roles: source mirror (`PREMIRRORS`), sstate mirror (`SSTATE_MIRRORS`), and the OTA bundle store (`rauc install http://nexus/…`). One service, one set of credentials. |
+| **In use** | **Nexus Repository CE** (raw repos: `yocto-sources-raw`, `yocto-sstate-raw`, `schultz-releases-raw`) | Serves the source mirror (`PREMIRRORS`) and the OTA bundle store (`rauc install http://nexus/…`). It was also the sstate mirror until 2026-08-30; `yocto-sstate-raw` is now unused (see below). |
 | Alternative | **Artifactory CE** | Evaluated first. Rejected: Java-only on the free tier; its Bintray-based install docs pointed at dead infrastructure; and its raw-repository support is behind a paywall for complex hosting. Nexus CE covers all three use cases out of the box. |
 | Alternative | **Gitea Packages / GitHub Packages** | Would cover the OTA bundle store, but not the sstate mirror or the source mirror — three different services instead of one. |
-| Alternative | **Simple HTTP server** (nginx/caddy) | Would serve files, but has no REST API, no HEAD-check for deduplication, and no path allowlist for scoped write accounts. The `yocto-ci` account's `BROWSE/READ/EDIT/ADD, no DELETE` scope on exactly the mirror repos (verified: `201` in-scope, `403` out-of-scope, `403` admin API) would be impossible to replicate without custom middleware. |
+| **In use (sstate only)** | **Simple HTTP server** (`python3 -m http.server` on the build host, `:8687`) | For *writable* repos it is the wrong tool: no REST API, no HEAD-check for deduplication, and no path allowlist for scoped write accounts — the `yocto-ci` account's `BROWSE/READ/EDIT/ADD, no DELETE` scope (verified: `201` in-scope, `403` out-of-scope, `403` admin API) would need custom middleware. None of that applies to sstate served **read-only, in place**: there are no writers. Chosen over nginx because nginx's `www-data` cannot read the `0750` home the cache lives in. |
 
 ### Nexus (Yocto-side integration)
 
@@ -243,6 +243,15 @@ credentials problem rather than a full disk. The nightly now pushes
 room-checked run. Note the `git2/` bare clones (32 GB, including a 5.6 GB
 kernel) were never pushed — sources use `-maxdepth 1`, and the
 `BB_GENERATE_MIRROR_TARBALLS` tarballs are what represent them.
+
+**Where sstate comes from instead (since 2026-09-25).** The build host serves
+`~/yocto-sstate` read-only on `http://rpi5g16nvme.local:8687`
+([scripts/setup-sstate-server.sh](../scripts/setup-sstate-server.sh)), so a
+second builder gets every hit with no copy and no upload step. It still needs
+`BB_HASHSERVE = "rpi5g16nvme.local:8686"`. Proven by
+[scripts/probe-sstate-mirror.sh](../scripts/probe-sstate-mirror.sh): an
+empty-cache `bitbake busybox` restored 490/490 tasks from it, and the same
+probe against a dead port got 0 and failed.
 
 **The trap that shaped it (five weeks, 2026-07-03 to 2026-08-12):** `SOURCE_MIRROR_URL` was set and `SSTATE_MIRRORS` was set, but `BB_GENERATE_MIRROR_TARBALLS` was not and nothing had ever uploaded to either repo. Every build silently 404'd on Nexus and fell through to the internet. The mirror *looked* configured. Proving a mirror actually works requires a build with `BB_FETCH_PREMIRRORONLY = "1"` and the local copies moved aside — not just "bytes uploaded."
 

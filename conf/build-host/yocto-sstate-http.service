@@ -1,5 +1,5 @@
-# Serves the build host's own sstate cache read-only to other builders, so there is
-# no upload step to forget (the Nexus yocto-sstate-raw push never ran). Installed by
+# Serves the build host's own sstate cache read-only to other builders: no second copy,
+# no blob store to fill (pushing sstate to Nexus filled it 2026-08-30, GAPS I-7). Installed by
 # scripts/setup-sstate-server.sh. Pairs with bitbake-hashserv on :8686 - without the
 # shared hash server a consumer computes different object names and misses every time.
 [Unit]

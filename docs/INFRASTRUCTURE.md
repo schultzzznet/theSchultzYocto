@@ -1,6 +1,6 @@
 # Infrastructure — what runs where, and why
 
-**Last verified:** 30 August 2026 (every endpoint and host below was probed, not
+**Last verified:** 25 September 2026 (every endpoint and host below was probed, not
 recalled).
 
 **What this is:** the missing map. The other docs explain *how* a thing works
@@ -16,15 +16,14 @@ host.
 
 ```mermaid
 flowchart LR
-    subgraph mac["MacStudioM2Max12 — daily driver"]
-        nexus["Nexus 3.90.4<br/>:8081 raw repos"]
-    end
     subgraph pi5["rpi5g16nvme — Yocto build host / CI"]
         bb["bitbake + nightly cron 03:30"]
         hs["bitbake-hashserv :8686"]
+        ss["sstate over HTTP :8687<br/>(read-only)"]
         caches["~/yocto-downloads<br/>~/yocto-sstate<br/>releases masters"]
     end
-    subgraph k3s["delli7c6g32 — k3s cluster"]
+    subgraph k3s["k3s cluster — VIP 192.168.1.250"]
+        nexus["Nexus 3.90.4<br/>:8081 raw repos"]
         dt["Dependency-Track :30410"]
         dd["DefectDojo :32438"]
         fleet["fleet-app /fleet"]
@@ -36,10 +35,13 @@ flowchart LR
     end
     dev["Pi 3 B+ 192.168.1.226<br/>A/B RAUC device"]
     esp["ESP32 serial bridge<br/>:8880"]
+    other["another builder<br/>(none yet)"]
 
     bb -->|"sources mirror + releases"| nexus
     bb -->|"SBOM + VEX"| dt
     bb -->|"pen-test findings"| dd
+    other -.->|"SSTATE_MIRRORS + BB_HASHSERVE"| ss
+    other -.-> hs
     dev -->|"rauc install (HTTP range)"| nexus
     dev -->|"heartbeat"| fleet
     fleet -->|"latest release?"| nexus
@@ -53,9 +55,9 @@ flowchart LR
 
 | Host | Hardware | Role | Free disk |
 |---|---|---|---|
-| **MacStudioM2Max12** | M2 Max, 460 GB | Daily driver; self-hosted GH Actions runner + buildx (Nexus moved to k3s 2026-09-25) | ~59 GiB (87% used) |
-| **rpi5g16nvme** | Pi 5, 16 GB RAM, 458 GB NVMe, Ubuntu 24.04 aarch64, 4 cores | **Yocto build host and the only CI** — there is no GitHub Actions build | ~220 GB (50%) |
-| **delli7c6g32** | k3s cluster | Dependency-Track, DefectDojo, SonarQube, fleet-app, **Nexus** | — |
+| **MacStudioM2Max12** | M2 Max, 460 GB | Daily driver; self-hosted GH Actions runner + buildx (Nexus moved to k3s 2026-09-25) | ~90 GiB |
+| **rpi5g16nvme** (`.228`, static lease) | Pi 5, 16 GB RAM, 458 GB NVMe, Ubuntu 24.04 aarch64, 4 cores | **Yocto build host and the only CI** — there is no GitHub Actions build. Also serves its sstate + hashserv to other builders | ~128 GB (71%) |
+| **k3s cluster** | 6 nodes, VIP `192.168.1.250` | Dependency-Track, DefectDojo, SonarQube, fleet-app, **Nexus** | — |
 | **macminim2pro10** | M2 Pro, 16 GB | Appliance host: frigate (NVR) + birdnet-go in Colima, **Ollama natively** | ~86 GiB |
 | **Pi 3 B+** | `192.168.1.226`, MAC `b8:27:eb:58:38:6d` | The target device — A/B RAUC, dual rootfs | — |
 | **ESP32 bridge** | `pi-serial-bridge.local` / `192.168.1.181` | Serial console over TCP `8880`; drops bytes on long bursts | — |
@@ -69,21 +71,23 @@ flowchart LR
 | Dependency-Track UI | k3s | `:30420` — browser only | 200 |
 | DefectDojo | k3s | `:32438` | 302 |
 | fleet-app | k3s | `http://delli7c6g32.local/fleet` | 200 |
-| hashserv | Pi 5 | `localhost:8686` | — |
+| hashserv | Pi 5 | `rpi5g16nvme.local:8686` (`localhost` on the Pi) | build |
+| sstate mirror | Pi 5 | `http://rpi5g16nvme.local:8687` — `scripts/setup-sstate-server.sh` | 490/490 restored |
 
 Nexus hosts three **separate** raw repos, and mixing them up has consequences:
-`yocto-sources-raw` (mirror), `yocto-sstate-raw` (mirror, currently unused —
-see below), and `schultz-releases-raw` (**the OTA origin — real data, not
-cache**).
+`yocto-sources-raw` (mirror), `yocto-sstate-raw` (**unused** — sstate left
+Nexus 2026-08-30, GAPS I-7; the Pi serves it in place), and
+`schultz-releases-raw` (**the OTA origin — real data, not cache**).
 
 ## Resource limits worth knowing
 
 | Where | Limit | Actual |
 |---|---|---|
-| Docker Desktop (Studio) | 48 GB disk, 6 GiB RAM, 8 CPU, 2 GB swap | 21 GB real, 2.0 GB RAM |
-| Nexus container | `mem_limit` 2560m; JVM `-Xms1200m -Xmx1200m -XX:MaxDirectMemorySize=1200m` | ~1.55 GB idle |
-| Nexus blob store | 47.1 GB | 22.7 GB used, **22 GB free** |
+| Nexus pod (k3s) | requests 250m / 1800Mi, limit 2560Mi; JVM `-Xms1200m -Xmx1200m -XX:MaxDirectMemorySize=1200m` | — |
+| Nexus blob store | 60 Gi PVC (ceph-block, 3 replicas) | ~23 GB used |
 | Colima (Mini) | 8 GiB RAM, 60 GB disk, 6 CPU, **no swap** | frigate 3.1 GiB + birdnet 0.9 GiB |
+
+The `Docker.raw` notes below are history: they are why Nexus left the Mac.
 
 **`Docker.raw` is sparse** — 48 GB apparent, 21 GB real. The cap costs nothing
 until used, so *growing* it is free and safe. **Shrinking destroys every volume**
@@ -100,23 +104,30 @@ The single most useful thing to know in an incident.
 | **Signing keys** | gitignored `keys/` beside the repo | **Unrecoverable.** Devices trust that cert |
 | **SBOM/VEX audit trail** | `rpi5g16nvme:~/build/sbom-archive/` | Unrecoverable history (GAPS I-6 — it sits in *scarthgap's* dir) |
 | Source mirror | Nexus, refilled from `~/yocto-downloads` | Re-push (~3.5 min, 19 GB) |
-| sstate | `rpi5g16nvme:~/yocto-sstate` | Rebuildable, slowly |
+| sstate | `rpi5g16nvme:~/yocto-sstate` (also what `:8687` serves) | Rebuildable, slowly |
 | `tmp/` build state | — | Fully regenerable from sstate |
-| Nexus itself | compose file in git | Rebuildable; **no backup of its volume** (GAPS I-8) |
+| Nexus itself | `the-docker-swarm-ai/infra/k3s/manifests/nexus/` | Rebuildable. `schultz-releases-raw` is backed up nightly to MinIO → Synology (`make verify-nexus-backup`); the caches deliberately are not |
 
 ## Why things are placed where they are
 
-Decided deliberately on 2026-08-30 after evaluating alternatives:
+Decided on 2026-08-30 after evaluating alternatives; revised 2026-09-25:
 
-- **Nexus stays on the Mac Studio.** It must be independent of the build host,
-  because the mirror exists to restore a build host that has been wiped — and
-  because `schultz-releases-raw` is a *runtime* dependency for the fleet, so a
-  build-host outage would otherwise take OTA down with it. That separation is
-  not theoretical: recovery on 2026-08-30 worked **only because** Nexus and the
-  release masters were on different machines.
-- **Not the build host.** Beyond the above, a 4-core box running 5 000-task
-  builds for hours would have Nexus competing for RAM and NVMe I/O during
-  exactly the window the build saturates them.
+- **Nexus moved to k3s on 2026-09-25** (it was on the Mac Studio). The
+  reasoning below still holds — it must be independent of the build host — and
+  the cluster is the stronger version of that: fleet-app hands devices OTA URLs
+  on it, so OTA failed whenever the Mac slept, and its blob store had 9.6 GB
+  left inside Docker Desktop's disk.
+- **Why not the build host.** The mirror exists to restore a build host that has
+  been wiped, and `schultz-releases-raw` is a *runtime* dependency for the
+  fleet, so a build-host outage would otherwise take OTA down with it. That
+  separation is not theoretical: recovery on 2026-08-30 worked **only because**
+  Nexus and the release masters were on different machines. And a 4-core box
+  running 5 000-task builds would have Nexus competing for RAM and NVMe I/O
+  during exactly the window the build saturates them.
+- **sstate is the exception, deliberately.** It is derived data the build host
+  already holds, so the Pi serves it in place (`:8687`) rather than copying
+  40 GB into a blob store — which is what filled Nexus on 2026-08-30. If the Pi
+  dies, another builder loses only speed, not correctness.
 - **Not the Mini**, despite 86 GiB free and SonarQube having moved out. Ollama
   runs *natively* there, so it competes for the same 16 GB from outside Colima:
   8 GiB VM + ~3 GB macOS + ~4 GB Ollama ≈ 15 of 16 GB, with **no swap in the

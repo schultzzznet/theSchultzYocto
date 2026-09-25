@@ -64,7 +64,7 @@ CONF_VERSION = "2"
 # and verified an actual PUT-from-Mac / GET-from-build-host round trip works
 # (anonymous read, same posture as the other Nexus repos on this instance).
 # Seeds NEW build dirs only; repoint existing ones with scripts/set-nexus-url.sh.
-# sstate is NOT in Nexus: yocto-sstate-raw was never filled. The build host serves its
+# sstate is NOT in Nexus: pushing it there filled the blob store (GAPS I-7). The build host serves its
 # own cache in place (scripts/setup-sstate-server.sh); proven by probe-sstate-mirror.sh.
 SSTATE_MIRRORS ?= "file://.* http://rpi5g16nvme.local:8687/PATH;downloadfilename=PATH"
 SOURCE_MIRROR_URL ?= "http://192.168.1.250:8081/repository/yocto-sources-raw/"

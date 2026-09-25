@@ -477,7 +477,10 @@ into shared build infrastructure instead of a place to dump files:
 two raw-hosted repos (`yocto-sources-raw`, `yocto-sstate-raw`) via Nexus's REST
 API, and both variables are active (uncommented) in
 [local.conf.sample](../conf/templates/schultz/local.conf.sample), pointed at a
-Nexus instance on the local network.
+Nexus instance on the local network. Since 2026-09-25 `SSTATE_MIRRORS` points
+at the build host itself instead (`rpi5g16nvme.local:8687`, see
+[TOOLING.md](TOOLING.md#nexus-yocto-side-integration)): sstate is derived data
+the build host already has, and copying it into Nexus filled the blob store.
 
 **Setting the variables is not the same as having a mirror**, which is worth
 recording because it stayed broken here for five weeks (2026-07-03 →
