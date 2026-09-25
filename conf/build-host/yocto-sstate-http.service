@@ -1,0 +1,23 @@
+# Serves the build host's own sstate cache read-only to other builders, so there is
+# no upload step to forget (the Nexus yocto-sstate-raw push never ran). Installed by
+# scripts/setup-sstate-server.sh. Pairs with bitbake-hashserv on :8686 - without the
+# shared hash server a consumer computes different object names and misses every time.
+[Unit]
+Description=Yocto sstate cache over HTTP (read-only, for SSTATE_MIRRORS)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cschultz
+Group=cschultz
+ExecStart=/usr/bin/python3 -m http.server 8687 --bind 0.0.0.0 --directory /home/cschultz/yocto-sstate
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

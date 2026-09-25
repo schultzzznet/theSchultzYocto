@@ -29,14 +29,15 @@ rewrite() { # <file> <line-regex>
     fi
 }
 
+# SSTATE_MIRRORS is not Nexus any more (scripts/setup-sstate-server.sh owns it).
 for conf in "$HOME"/build*/conf/local.conf; do
-    rewrite "$conf" '^(SSTATE_MIRRORS|SOURCE_MIRROR_URL)'
+    rewrite "$conf" '^SOURCE_MIRROR_URL'
 done
 rewrite "$HOME/keys/nexus.env" '^NEXUS_URL='
 echo "  $changed file(s) changed"
 
-stale="$(grep -lE '^(SSTATE_MIRRORS|SOURCE_MIRROR_URL|NEXUS_URL)' "$HOME"/build*/conf/local.conf "$HOME/keys/nexus.env" 2>/dev/null |
-    xargs grep -hE '^(SSTATE_MIRRORS|SOURCE_MIRROR_URL|NEXUS_URL)' | grep -v "$NEW" || true)"
+stale="$(grep -lE '^(SOURCE_MIRROR_URL|NEXUS_URL)' "$HOME"/build*/conf/local.conf "$HOME/keys/nexus.env" 2>/dev/null |
+    xargs grep -hE '^(SOURCE_MIRROR_URL|NEXUS_URL)' | grep -v "$NEW" || true)"
 if [ -n "$stale" ]; then
     echo "FAIL: lines still pointing elsewhere:"
     echo "$stale"
@@ -46,19 +47,11 @@ fi
 curl -fsS -o /dev/null "$NEW/service/rest/v1/status/writable"
 echo "  ok    $NEW is writable, reached from $(hostname)"
 
-# Prove a real download from each Yocto mirror that has content. An EMPTY sstate
-# mirror is reported, not failed: it was empty on the Mac too (found 2026-09-25),
-# so SSTATE_MIRRORS has never produced a hit - a finding, not a migration fault.
-downloaded=0
-for repo in yocto-sources-raw yocto-sstate-raw; do
-    obj="$(curl -fsS "$NEW/service/rest/v1/assets?repository=$repo" |
-        python3 -c 'import json,sys; i=json.load(sys.stdin)["items"]; print(i[0]["path"] if i else "")')"
-    if [ -z "$obj" ]; then
-        echo "  WARN  $repo is EMPTY - builds get no hits from it"
-        continue
-    fi
-    curl -fsS -o /dev/null "$NEW/repository/$repo/$obj"
-    echo "  ok    $repo: $obj downloads"
-    downloaded=$((downloaded + 1))
-done
-[ "$downloaded" -gt 0 ] || { echo "FAIL: no Yocto mirror object could be downloaded"; exit 1; }
+# Prove a real download from the source mirror. (yocto-sstate-raw was always empty;
+# sstate is served by the build host itself - scripts/setup-sstate-server.sh.)
+repo=yocto-sources-raw
+obj="$(curl -fsS "$NEW/service/rest/v1/assets?repository=$repo" |
+    python3 -c 'import json,sys; i=json.load(sys.stdin)["items"]; print(i[0]["path"] if i else "")')"
+[ -n "$obj" ] || { echo "FAIL: $repo is EMPTY - builds get no source-mirror hits"; exit 1; }
+curl -fsS -o /dev/null "$NEW/repository/$repo/$obj"
+echo "  ok    $repo: $obj downloads"

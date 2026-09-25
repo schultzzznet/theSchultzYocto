@@ -134,6 +134,8 @@ theSchultzYocto/                  <- this repo == the "schultz" layer
 │   ├── setup-nexus-mirror.sh     <- create the Nexus raw repos (sstate/source mirror + releases)
 │   ├── populate-nexus-mirror.sh  <- runs ON the build host: fill those mirrors from downloads/ + sstate-cache/
 │   ├── setup-hashserv.sh         <- runs ON the build host: shared hash-equivalence server for the sstate mirror
+│   ├── setup-sstate-server.sh    <- run from the Mac: serves the build host's sstate read-only on :8687
+│   ├── probe-sstate-mirror.sh    <- runs ON a build host: empty-cache build must restore from the mirror
 │   ├── bootstrap-credentials.sh  <- mint every keys/*.env token from scratch (none are in git, by design)
 │   ├── cut-release.sh            <- one command: build + verify + SBOM + archive + publish to Nexus + tag
 │   ├── ota-deploy.sh             <- ship a release to a running Pi over the air (streams from Nexus)
