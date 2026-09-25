@@ -58,13 +58,14 @@ CONF_VERSION = "2"
 # Artifactory instance. It was deliberately evaluated and rejected there
 # (free tier is Java-only, no npm; download infra points at the dead
 # Bintray) in favor of Nexus Repository CE, which IS actually running
-# (MacStudioM2Max12:8081, this same Mac). Nexus didn't have a generic "raw"
+# (MacStudioM2Max12:8081 until 2026-09-25; now k3s on the kube-vip VIP). Nexus didn't have a generic "raw"
 # repo before this (only maven-public/npm-proxy/docker-proxy) -- created
 # yocto-sources-raw + yocto-sstate-raw via scripts/setup-nexus-mirror.sh,
 # and verified an actual PUT-from-Mac / GET-from-build-host round trip works
 # (anonymous read, same posture as the other Nexus repos on this instance).
-SSTATE_MIRRORS ?= "file://.* http://MacStudioM2Max12.local:8081/repository/yocto-sstate-raw/PATH;downloadfilename=PATH"
-SOURCE_MIRROR_URL ?= "http://MacStudioM2Max12.local:8081/repository/yocto-sources-raw/"
+# Seeds NEW build dirs only; repoint existing ones with scripts/set-nexus-url.sh.
+SSTATE_MIRRORS ?= "file://.* http://192.168.1.250:8081/repository/yocto-sstate-raw/PATH;downloadfilename=PATH"
+SOURCE_MIRROR_URL ?= "http://192.168.1.250:8081/repository/yocto-sources-raw/"
 INHERIT += "own-mirrors"
 
 # Without this, git:// SRC_URIs stay as bare clones in DL_DIR and are never

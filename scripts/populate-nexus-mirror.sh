@@ -37,7 +37,7 @@ if [ -f "$WORK_DIR/keys/nexus.env" ]; then
   set +a
 fi
 
-NEXUS_URL="${NEXUS_URL:-http://MacStudioM2Max12.local:8081}"
+NEXUS_URL="${NEXUS_URL:-http://192.168.1.250:8081}"
 NEXUS_WRITE_USER="${NEXUS_WRITE_USER:-}"
 NEXUS_WRITE_PASS="${NEXUS_WRITE_PASS:-}"
 # Deliberately NOT NEXUS_REPO -- keys/nexus.env already defines that as the

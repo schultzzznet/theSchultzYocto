@@ -53,9 +53,9 @@ flowchart LR
 
 | Host | Hardware | Role | Free disk |
 |---|---|---|---|
-| **MacStudioM2Max12** | M2 Max, 460 GB | Daily driver; Docker Desktop hosts **Nexus**; self-hosted GH Actions runner + buildx | ~59 GiB (87% used) |
+| **MacStudioM2Max12** | M2 Max, 460 GB | Daily driver; self-hosted GH Actions runner + buildx (Nexus moved to k3s 2026-09-25) | ~59 GiB (87% used) |
 | **rpi5g16nvme** | Pi 5, 16 GB RAM, 458 GB NVMe, Ubuntu 24.04 aarch64, 4 cores | **Yocto build host and the only CI** — there is no GitHub Actions build | ~220 GB (50%) |
-| **delli7c6g32** | k3s cluster | Dependency-Track, DefectDojo, SonarQube, fleet-app | — |
+| **delli7c6g32** | k3s cluster | Dependency-Track, DefectDojo, SonarQube, fleet-app, **Nexus** | — |
 | **macminim2pro10** | M2 Pro, 16 GB | Appliance host: frigate (NVR) + birdnet-go in Colima, **Ollama natively** | ~86 GiB |
 | **Pi 3 B+** | `192.168.1.226`, MAC `b8:27:eb:58:38:6d` | The target device — A/B RAUC, dual rootfs | — |
 | **ESP32 bridge** | `pi-serial-bridge.local` / `192.168.1.181` | Serial console over TCP `8880`; drops bytes on long bursts | — |
@@ -64,7 +64,7 @@ flowchart LR
 
 | Service | Host | Endpoint | Verified |
 |---|---|---|---|
-| Nexus (raw repos) | Mac Studio | `http://MacStudioM2Max12.local:8081` | 200 |
+| Nexus (raw repos) | k3s (kube-vip VIP) | `http://192.168.1.250:8081` | 200 |
 | Dependency-Track API | k3s | `:30410` — **scripts use this one** | 200 |
 | Dependency-Track UI | k3s | `:30420` — browser only | 200 |
 | DefectDojo | k3s | `:32438` | 302 |

@@ -198,7 +198,7 @@ The flashable base image (squashfs-capable kernel + `panic=10` boot script +
 
 ```sh
 # 1. Pull the base image (any box that can reach Nexus)
-curl -sfO http://MacStudioM2Max12.local:8081/repository/schultz-releases-raw/theSchultzYocto/base-images/schultz-ab-base-squashfs-kernel.wic.gz
+curl -sfO http://192.168.1.250:8081/repository/schultz-releases-raw/theSchultzYocto/base-images/schultz-ab-base-squashfs-kernel.wic.gz
 
 # 2. Flash the SD (macOS: diskutil list to find the card; unmount; rdiskN = raw = faster)
 diskutil unmountDisk /dev/diskN

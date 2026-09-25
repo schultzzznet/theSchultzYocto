@@ -36,7 +36,7 @@ K3S_CREDS="${K3S_CREDS:-$WORK_DIR/the-docker-swarm-ai/infra/k3s/.credentials}"
 DTRACK_URL="${DTRACK_URL:-http://delli7c6g32.local:30410}"
 DTRACK_TEAM="${DTRACK_TEAM:-Automation}"
 DEFECTDOJO_URL="${DEFECTDOJO_URL:-http://delli7c6g32.local:32438}"
-NEXUS_URL="${NEXUS_URL:-http://MacStudioM2Max12.local:8081}"
+NEXUS_URL="${NEXUS_URL:-http://192.168.1.250:8081}"
 PENTEST_TARGET="${PENTEST_TARGET:-192.168.1.226}"
 
 ROTATE=0 CHECK_ONLY=0 INSTALL_TO="" ONLY=""
@@ -235,7 +235,7 @@ if [ -n "$INSTALL_TO" ] && [ "$CHECK_ONLY" -eq 0 ]; then
   echo "==== installing to $INSTALL_TO:~/keys/ ===="
   for f in dtrack.env defectdojo.env nexus.env; do
     [ -f "$KEYS_DIR/$f" ] || continue
-    sed 's|^NEXUS_URL=http://localhost:|NEXUS_URL=http://MacStudioM2Max12.local:|' "$KEYS_DIR/$f" \
+    sed 's|^NEXUS_URL=http://localhost:|NEXUS_URL=http://192.168.1.250:|' "$KEYS_DIR/$f" \
       | ssh "$INSTALL_TO" "umask 077; mkdir -p ~/keys; cat > ~/keys/$f.tmp && mv ~/keys/$f.tmp ~/keys/$f && echo '  installed $f'"
   done
 fi

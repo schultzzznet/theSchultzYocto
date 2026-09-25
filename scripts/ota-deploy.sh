@@ -21,7 +21,7 @@
 #     --reboot   reboot into the new slot and verify os-release afterwards
 #     --local    force the ephemeral local HTTP server instead of Nexus
 #
-# Env: NEXUS_URL (default from keys/nexus.env, else http://MacStudioM2Max12.local:8081),
+# Env: NEXUS_URL (default from keys/nexus.env, else http://192.168.1.250:8081),
 #      NEXUS_REPO (default schultz-releases-raw), OTA_HTTP_PORT (default 8099, --local),
 #      SCHULTZ_MACHINE (default raspberrypi3-64) -- which board's bundle to deploy.
 
@@ -106,7 +106,7 @@ if [ "$LOCAL" = 0 ]; then
   if [ -z "$NEXUS_URL_EFF" ] && [ -f "$WORK_DIR/keys/nexus.env" ]; then
     NEXUS_URL_EFF="$(sed -nE 's/^NEXUS_URL=//p' "$WORK_DIR/keys/nexus.env" | head -1)"
   fi
-  NEXUS_URL_EFF="${NEXUS_URL_EFF:-http://MacStudioM2Max12.local:8081}"
+  NEXUS_URL_EFF="${NEXUS_URL_EFF:-http://192.168.1.250:8081}"
   NREPO="${NEXUS_REPO:-schultz-releases-raw}"
   NEXUS_BUNDLE_URL=""
   for sub in "${REL_SUBS[@]}"; do
