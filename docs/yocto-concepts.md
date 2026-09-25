@@ -473,9 +473,11 @@ into shared build infrastructure instead of a place to dump files:
   mid-project (it happens), and is faster than re-fetching from the public
   internet every time.
 
-[scripts/setup-nexus-mirror.sh](../scripts/setup-nexus-mirror.sh) creates the
-two raw-hosted repos (`yocto-sources-raw`, `yocto-sstate-raw`) via Nexus's REST
-API, and both variables are active (uncommented) in
+The raw-hosted repos (`yocto-sources-raw`, `yocto-sstate-raw`) are declared in
+the-docker-swarm-ai's
+[infra/k3s/configs/nexus/nexus-config.json](https://github.com/schultzzznet/the-docker-swarm-ai/blob/master/infra/k3s/configs/nexus/nexus-config.json)
+(applied by `deploy-nexus`; this repo's `setup-nexus-mirror.sh` was retired on
+2026-09-25), and both variables are active (uncommented) in
 [local.conf.sample](../conf/templates/schultz/local.conf.sample), pointed at a
 Nexus instance on the local network. Since 2026-09-25 `SSTATE_MIRRORS` points
 at the build host itself instead (`rpi5g16nvme.local:8687`, see
@@ -486,7 +488,7 @@ the build host already has, and copying it into Nexus filled the blob store.
 recording because it stayed broken here for five weeks (2026-07-03 →
 2026-08-12) while looking configured. Two separate omissions:
 
-1. **Nothing populated the repos.** `setup-nexus-mirror.sh` creates them; no
+1. **Nothing populated the repos.** Creating them did not fill them; no
    script ever uploaded to them. Every fetch dutifully asked Nexus first, got a
    404, and went to the internet — the exact behaviour you'd get with the
    variables unset, only slower.
@@ -516,7 +518,7 @@ mirror can only break a build, never alter one. sstate entries are executable
 build output that gets unpacked into later builds and are *not* independently
 verified — so write access to `yocto-sstate-raw` is effectively commit access to
 your images. Reads are anonymous by design; writes use a **scoped `yocto-ci`
-account** created by `setup-nexus-mirror.sh` — `BROWSE/READ/EDIT/ADD` on exactly
+account** declared in the same Nexus config — `BROWSE/READ/EDIT/ADD` on exactly
 the three raw repos, no `DELETE`, no admin. Verified: `201` writing to its own
 repo, `403` writing to any other repo, `403` on the admin API. It is deliberately
 not the shared instance admin login that the rest of the home-lab tooling uses.
@@ -554,8 +556,8 @@ rather than silently degrade it, which is the right way round.
 Beyond mirrors, Nexus's format-aware repo types (Debian, RPM, apt) can host
 an actual package feed if you ever want field updates via `opkg`/`apt`
 instead of full image re-flashes. And this is now real for **release
-artifacts**: [scripts/setup-nexus-mirror.sh](../scripts/setup-nexus-mirror.sh)
-also creates a third raw repo, `schultz-releases-raw`, where
+artifacts**: the same Nexus config also declares a third raw repo,
+`schultz-releases-raw`, where
 [cut-release.sh](../scripts/cut-release.sh) publishes each signed `.raucb`
 bundle + A/B image. The device then updates straight from it —
 `rauc install http://nexus/repository/schultz-releases-raw/…` — and because

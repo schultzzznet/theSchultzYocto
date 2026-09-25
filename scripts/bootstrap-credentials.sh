@@ -162,8 +162,10 @@ with os.fdopen(fd, 'w') as f:
 }
 
 # ── Nexus ────────────────────────────────────────────────────────────────────
-# setup-nexus-mirror.sh owns the account (it creates the scoped yocto-ci role
-# and user); this only normalises its output into keys/nexus.env.
+# The yocto-ci account is IaC in the-docker-swarm-ai (infra/k3s/configs/nexus/
+# nexus-config.json, applied by `make -C infra/k3s deploy-nexus`, which creates it
+# from keys/nexus-write.env). This only mints or rotates that password, then
+# normalises it into keys/nexus.env.
 nexus_creds_work() {
   [ -f "$KEYS_DIR/nexus.env" ] || return 1
   local u p; u="$(sed -n 's/^NEXUS_WRITE_USER=//p' "$KEYS_DIR/nexus.env" | head -1)"
@@ -181,35 +183,24 @@ bootstrap_nexus() {
     status "nexus" "$NEXUS_URL" "existing creds OK -- skipped"
     return 0
   fi
-  [ "$CHECK_ONLY" -eq 1 ] && { status "nexus" "$NEXUS_URL" "WOULD create/rotate the yocto-ci account"; return 0; }
+  [ "$CHECK_ONLY" -eq 1 ] && { status "nexus" "$NEXUS_URL" "WOULD mint/rotate the yocto-ci password"; return 0; }
 
-  NEXUS_URL="$NEXUS_URL" "$REPO_DIR/scripts/setup-nexus-mirror.sh" >/dev/null
-
-  # If the account already existed, setup-nexus-mirror.sh leaves it alone and
-  # writes nothing -- and a password can never be read back out of Nexus. The
-  # only way to recover a lost credential is to set a new one.
-  if [ ! -f "$KEYS_DIR/nexus-write.env" ]; then
-    status "nexus" "$NEXUS_URL" "account exists but password unknown -- rotating"
-    local admin_pw user code
-    admin_pw="${NEXUS_ADMIN_PASSWORD:-nexusadmin123}"
+  # A password can never be read back out of Nexus: a lost one is recovered by
+  # setting a new one. printf is a builtin, so the value never reaches argv.
+  if [ "$ROTATE" -eq 1 ] || [ ! -f "$KEYS_DIR/nexus-write.env" ]; then
+    local user code
     user="${NEXUS_CI_USER:-yocto-ci}"
-    KEYS_DIR="$KEYS_DIR" NEXUS_URL="$NEXUS_URL" NEXUS_CI_USER="$user" python3 -c "
-import os, secrets
-pw = secrets.token_urlsafe(32)
-k = os.environ['KEYS_DIR']
-fd = os.open(k + '/nexus-write.env', os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-with os.fdopen(fd, 'w') as f:
-    f.write('NEXUS_URL=%s\nNEXUS_WRITE_USER=%s\nNEXUS_WRITE_PASS=%s\n'
-            % (os.environ['NEXUS_URL'], os.environ['NEXUS_CI_USER'], pw))
-"
+    printf 'NEXUS_URL=%s\nNEXUS_WRITE_USER=%s\nNEXUS_WRITE_PASS=%s\n' \
+      "$NEXUS_URL" "$user" "$(openssl rand -hex 24)" > "$KEYS_DIR/nexus-write.env"
     # text/plain body, PUT -- confirmed against this Nexus's /service/rest/swagger.json.
-    code="$(sed -n 's/^NEXUS_WRITE_PASS=//p' "$KEYS_DIR/nexus-write.env" \
-      | tr -d '\r\n' \
-      | curl -sS -o /dev/null -m 20 -w '%{http_code}' -u "admin:$admin_pw" -X PUT \
-          -H 'Content-Type: text/plain' --data-binary @- \
+    code="$(sed -n 's/^NEXUS_WRITE_PASS=//p' "$KEYS_DIR/nexus-write.env" | tr -d '\r\n' \
+      | curl -sS -o /dev/null -m 20 -w '%{http_code}' \
+          -K <(printf 'user = "admin:%s"\n' "$(read_secret "$K3S_CREDS/nexus-admin-password")") \
+          -X PUT -H 'Content-Type: text/plain' --data-binary @- \
           "$NEXUS_URL/service/rest/v1/security/users/$user/change-password")"
     case "$code" in
-      2*) ;;
+      2*) status "nexus" "$NEXUS_URL" "yocto-ci password rotated" ;;
+      404) echo "  nexus: no $user account -- run \`make -C the-docker-swarm-ai/infra/k3s deploy-nexus\`, which creates it from keys/nexus-write.env" >&2; return 1 ;;
       *)  echo "  nexus: password rotation failed (HTTP $code)" >&2; return 1 ;;
     esac
   fi

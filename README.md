@@ -131,7 +131,6 @@ theSchultzYocto/                  <- this repo == the "schultz" layer
 │   ├── pentest-scan.sh           <- run nmap/ssh-audit/testssl/lynis/checksec/kernel checks
 │   ├── upload-pentest.sh         <- push pen-test findings + a DT mirror to DefectDojo
 │   ├── setup-pentest-tools.sh    <- install the pen-test toolchain on the build host
-│   ├── setup-nexus-mirror.sh     <- create the Nexus raw repos (source mirror + releases)
 │   ├── populate-nexus-mirror.sh  <- runs ON the build host (nightly): fill the source mirror from downloads/
 │   ├── setup-hashserv.sh         <- runs ON the build host: shared hash-equivalence server for the sstate mirror
 │   ├── setup-sstate-server.sh    <- run from the Mac: serves the build host's sstate read-only on :8687
@@ -258,16 +257,18 @@ recipe would rebuild `gcc-cross`, `glibc`, and the whole world every time; the
 cache is what makes iterative Yocto usable at all. The Yocto project itself runs
 a public sstate mirror (`sstate.yoctoproject.org`) for precisely this reason.
 
-Two things get mirrored here — both pointed at a **Nexus** raw repo on the LAN
-in [local.conf.sample](conf/templates/schultz/local.conf.sample), with the repos
-created by [scripts/setup-nexus-mirror.sh](scripts/setup-nexus-mirror.sh):
+Two things get mirrored here, pointed at in
+[local.conf.sample](conf/templates/schultz/local.conf.sample). The Nexus raw repos
+are declared in the-docker-swarm-ai (`infra/k3s/configs/nexus/nexus-config.json`,
+applied by `deploy-nexus`); sstate is served by the build host itself (`:8687`):
 
 - **`SOURCE_MIRROR_URL`** — the pinned upstream source tarballs (`DL_DIR`).
   Pure resilience: upstream tags vanish and projects go offline mid-project.
   Every fetch is checksum-verified against the recipe's `SRC_URI[sha256sum]`,
   so a mirror can't smuggle anything in — it either matches the pin or the
   build fails.
-- **`SSTATE_MIRRORS`** — the compiled task outputs described above.
+- **`SSTATE_MIRRORS`** — the compiled task outputs described above, from
+  `http://rpi5g16nvme.local:8687` ([scripts/setup-sstate-server.sh](scripts/setup-sstate-server.sh)).
 
 Setting those two variables is necessary but *not sufficient*, which is worth
 saying plainly because it went unnoticed here from 2026-07-03 to 2026-08-12:
@@ -279,9 +280,9 @@ creating the repos does not fill them, and a mirror nobody uploads to is just a
   file. Only the flat files in `downloads/` were mirrorable; the kernel and 37
   other git clones (6.1 GB) were not.
 - **[scripts/populate-nexus-mirror.sh](scripts/populate-nexus-mirror.sh)** —
-  uploads `downloads/` and `sstate-cache/` into the two raw repos, skipping
-  what is already there. The nightly runs it after each successful build, so
-  the mirror tracks whatever the current image actually needs.
+  uploads `downloads/` into the source repo, skipping what is already there
+  (sstate only with `SCHULTZ_MIRROR_SSTATE=1`, see GAPS I-7). The nightly runs
+  it after each successful build, so the mirror tracks what the image needs.
 - **[scripts/setup-hashserv.sh](scripts/setup-hashserv.sh)** — a shared
   hash-equivalence server. sstate objects are named by *unihash*, and BitBake's
   default server keeps those mappings in a socket-local database inside

@@ -2,7 +2,8 @@
 # Push this build host's caches INTO the Nexus raw mirrors that local.conf
 # already points at.
 #
-# setup-nexus-mirror.sh (run on the Mac) only *creates* the repos. Nothing was
+# The repos are declared in the-docker-swarm-ai (infra/k3s/configs/nexus/nexus-config.json);
+# declaring them does not fill them. Nothing was
 # ever filling them, so SOURCE_MIRROR_URL / SSTATE_MIRRORS pointed at two empty
 # buckets: every fetch 404'd past Nexus straight to upstream, and the
 # "upstream deleted the tag" resilience those variables are supposed to buy was
